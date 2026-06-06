@@ -69,9 +69,15 @@ export class Player {
   async play(): Promise<void> {
     if (this.state.isPlaying) return;
 
-    await synth.ensureContext();
-
     this.state.isPlaying = true;
+
+    try {
+      await synth.ensureContext();
+    } catch (e) {
+      this.state.isPlaying = false;
+      throw e;
+    }
+
     this.state.startTime = synth.getCurrentTime();
     this.state.startTicks = this.state.playheadTicks;
     this.state.activeNoteIds.clear();

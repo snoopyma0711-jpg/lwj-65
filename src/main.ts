@@ -508,19 +508,27 @@ function redo(): void {
   }
 }
 
-function togglePlay(): void {
+async function togglePlay(): Promise<void> {
   if (player.isPlaying()) {
     stopPlayback();
   } else {
-    startPlayback();
+    await startPlayback();
   }
 }
 
-function startPlayback(): void {
-  player.setBpm(bpm);
-  player.play();
+async function startPlayback(): Promise<void> {
   updatePlayButton();
-  updateStatus('播放中...');
+  updateStatus('正在启动...');
+
+  player.setBpm(bpm);
+  try {
+    await player.play();
+    updatePlayButton();
+    updateStatus('播放中...');
+  } catch (e) {
+    updatePlayButton();
+    updateStatus('播放启动失败: ' + (e as Error).message);
+  }
 }
 
 function stopPlayback(): void {
