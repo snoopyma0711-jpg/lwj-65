@@ -1,0 +1,344 @@
+import type { Note, ViewConfig } from './types';
+import { pitchToName, isBlackKey } from './types';
+
+export class PianoRollRenderer {
+  private keysCanvas: HTMLCanvasElement;
+  private headerCanvas: HTMLCanvasElement;
+  private gridCanvas: HTMLCanvasElement;
+  private keysCtx: CanvasRenderingContext2D;
+  private headerCtx: CanvasRenderingContext2D;
+  private gridCtx: CanvasRenderingContext2D;
+  private config: ViewConfig;
+  private devicePixelRatio: number;
+
+  constructor(
+    keysCanvas: HTMLCanvasElement,
+    headerCanvas: HTMLCanvasElement,
+    gridCanvas: HTMLCanvasElement,
+    config: ViewConfig
+  ) {
+    this.keysCanvas = keysCanvas;
+    this.headerCanvas = headerCanvas;
+    this.gridCanvas = gridCanvas;
+    this.config = config;
+    this.devicePixelRatio = window.devicePixelRatio || 1;
+
+    const keysCtx = keysCanvas.getContext('2d');
+    const headerCtx = headerCanvas.getContext('2d');
+    const gridCtx = gridCanvas.getContext('2d');
+
+    if (!keysCtx || !headerCtx || !gridCtx) {
+      throw new Error('Failed to get canvas contexts');
+    }
+
+    this.keysCtx = keysCtx;
+    this.headerCtx = headerCtx;
+    this.gridCtx = gridCtx;
+  }
+
+  updateConfig(config: Partial<ViewConfig>): void {
+    this.config = { ...this.config, ...config };
+  }
+
+  getConfig(): ViewConfig {
+    return { ...this.config };
+  }
+
+  resize(containerWidth: number, containerHeight: number, totalWidth: number, totalHeight: number): void {
+    const dpr = this.devicePixelRatio;
+
+    this.keysCanvas.width = this.config.keysWidth * dpr;
+    this.keysCanvas.height = containerHeight * dpr;
+    this.keysCanvas.style.width = `${this.config.keysWidth}px`;
+    this.keysCanvas.style.height = `${containerHeight}px`;
+    this.keysCtx.scale(dpr, dpr);
+
+    this.headerCanvas.width = containerWidth * dpr;
+    this.headerCanvas.height = this.config.headerHeight * dpr;
+    this.headerCanvas.style.width = `${containerWidth}px`;
+    this.headerCanvas.style.height = `${this.config.headerHeight}px`;
+    this.headerCtx.scale(dpr, dpr);
+
+    this.gridCanvas.width = totalWidth * dpr;
+    this.gridCanvas.height = totalHeight * dpr;
+    this.gridCanvas.style.width = `${totalWidth}px`;
+    this.gridCanvas.style.height = `${totalHeight}px`;
+    this.gridCtx.scale(dpr, dpr);
+  }
+
+  renderKeys(scrollY: number, hoverPitch: number | null, activePitches: Set<number>): void {
+    const ctx = this.keysCtx;
+    const { keysWidth, rowHeight, minPitch, totalKeys } = this.config;
+    const height = this.keysCanvas.height / this.devicePixelRatio;
+
+    ctx.clearRect(0, 0, keysWidth, height);
+
+    const startPitch = minPitch + Math.floor(scrollY / rowHeight);
+    const endPitch = Math.min(minPitch + totalKeys, startPitch + Math.ceil(height / rowHeight) + 1);
+
+    for (let pitch = startPitch; pitch <= endPitch; pitch++) {
+      const y = (pitch - minPitch) * rowHeight - scrollY;
+      const isBlack = isBlackKey(pitch);
+      const isHover = pitch === hoverPitch;
+      const isActive = activePitches.has(pitch);
+
+      if (isBlack) {
+        ctx.fillStyle = isActive ? '#e94560' : isHover ? '#3a3a5c' : '#2a2a4a';
+        ctx.fillRect(0, y, keysWidth * 0.75, rowHeight);
+        ctx.strokeStyle = '#1a1a2e';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(0, y, keysWidth * 0.75, rowHeight);
+
+        ctx.fillStyle = '#a0a0a0';
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(pitchToName(pitch), keysWidth - 5, y + rowHeight / 2);
+      } else {
+        ctx.fillStyle = isActive ? '#ff6b81' : isHover ? '#4a4a6c' : '#f0f0f0';
+        ctx.fillRect(0, y, keysWidth, rowHeight);
+        ctx.strokeStyle = '#c0c0c0';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(0, y, keysWidth, rowHeight);
+
+        ctx.fillStyle = isActive ? '#ffffff' : '#333333';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(pitchToName(pitch), keysWidth - 5, y + rowHeight / 2);
+      }
+    }
+  }
+
+  renderHeader(scrollX: number, bpm: number, beatsPerMeasure: number): void {
+    const ctx = this.headerCtx;
+    const { beatWidth, headerHeight } = this.config;
+    const width = this.headerCanvas.width / this.devicePixelRatio;
+
+    ctx.clearRect(0, 0, width, headerHeight);
+
+    const totalBeats = Math.ceil((width + scrollX) / beatWidth);
+    const startBeat = Math.floor(scrollX / beatWidth);
+
+    ctx.fillStyle = '#a0a0a0';
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    for (let beat = startBeat; beat <= startBeat + totalBeats + 1; beat++) {
+      const x = beat * beatWidth - scrollX;
+      const measure = Math.floor(beat / beatsPerMeasure) + 1;
+      const beatInMeasure = beat % beatsPerMeasure;
+
+      if (beatInMeasure === 0) {
+        ctx.fillStyle = '#e94560';
+        ctx.fillRect(x, 0, 2, headerHeight);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 12px sans-serif';
+        ctx.fillText(`${measure}`, x + beatWidth / 2, headerHeight / 2);
+      } else {
+        ctx.fillStyle = '#0f3460';
+        ctx.fillRect(x, 0, 1, headerHeight);
+        ctx.fillStyle = '#707070';
+        ctx.font = '10px sans-serif';
+        ctx.fillText(`${beatInMeasure + 1}`, x + beatWidth / 2, headerHeight / 2);
+      }
+    }
+  }
+
+  renderGrid(
+    scrollX: number,
+    scrollY: number,
+    viewportWidth: number,
+    viewportHeight: number,
+    beatsPerMeasure: number
+  ): void {
+    const ctx = this.gridCtx;
+    const { rowHeight, beatWidth, minPitch, totalKeys } = this.config;
+    const totalHeight = totalKeys * rowHeight;
+
+    ctx.clearRect(0, 0, this.gridCanvas.width / this.devicePixelRatio, this.gridCanvas.height / this.devicePixelRatio);
+
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillRect(0, 0, this.gridCanvas.width, totalHeight);
+
+    const startPitch = minPitch;
+    const endPitch = minPitch + totalKeys;
+
+    for (let pitch = startPitch; pitch < endPitch; pitch++) {
+      const y = (pitch - minPitch) * rowHeight;
+      const isBlack = isBlackKey(pitch);
+
+      if (isBlack) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
+        ctx.fillRect(0, y, this.gridCanvas.width, rowHeight);
+      }
+
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(this.gridCanvas.width, y);
+      ctx.stroke();
+    }
+
+    const totalBeats = Math.ceil(this.gridCanvas.width / beatWidth);
+
+    for (let beat = 0; beat <= totalBeats; beat++) {
+      const x = beat * beatWidth;
+      const beatInMeasure = beat % beatsPerMeasure;
+
+      if (beatInMeasure === 0) {
+        ctx.strokeStyle = 'rgba(233, 69, 96, 0.4)';
+        ctx.lineWidth = 2;
+      } else {
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+        ctx.lineWidth = 1;
+      }
+
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, totalHeight);
+      ctx.stroke();
+
+      if (beatInMeasure === 1 || beatInMeasure === 2 || beatInMeasure === 3) {
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+        ctx.lineWidth = 1;
+        for (let sub = 1; sub < 4; sub++) {
+          const subX = x + (sub * beatWidth) / 4;
+          ctx.beginPath();
+          ctx.moveTo(subX, 0);
+          ctx.lineTo(subX, totalHeight);
+          ctx.stroke();
+        }
+      }
+    }
+  }
+
+  renderNotes(notes: Note[], scrollX: number, scrollY: number): void {
+    const ctx = this.gridCtx;
+    const { rowHeight, beatWidth, ticksPerBeat, minPitch, resizeHandleWidth } = this.config;
+
+    for (const note of notes) {
+      const x = (note.start / ticksPerBeat) * beatWidth;
+      const y = (note.pitch - minPitch) * rowHeight + 1;
+      const width = (note.duration / ticksPerBeat) * beatWidth - 2;
+      const height = rowHeight - 2;
+
+      const isBlack = isBlackKey(note.pitch);
+      const baseColor = isBlack ? '#e94560' : '#ff6b81';
+      const selectedColor = '#4ecdc4';
+
+      const gradient = ctx.createLinearGradient(x, y, x, y + height);
+      if (note.selected) {
+        gradient.addColorStop(0, selectedColor);
+        gradient.addColorStop(1, '#3db8b0');
+      } else {
+        gradient.addColorStop(0, baseColor);
+        gradient.addColorStop(1, isBlack ? '#c73e54' : '#e05570');
+      }
+
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.roundRect(x, y, width, height, 3);
+      ctx.fill();
+
+      ctx.strokeStyle = note.selected ? '#6ee7de' : 'rgba(255, 255, 255, 0.3)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      if (width > resizeHandleWidth * 2) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.fillRect(x + width - resizeHandleWidth, y + 2, 2, height - 4);
+      }
+
+      if (note.selected) {
+        ctx.shadowColor = selectedColor;
+        ctx.shadowBlur = 10;
+        ctx.strokeStyle = selectedColor;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(x, y, width, height, 3);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      }
+    }
+  }
+
+  renderPlayhead(playheadTicks: number, scrollX: number, viewportWidth: number): void {
+    const ctx = this.gridCtx;
+    const { beatWidth, ticksPerBeat } = this.config;
+    const x = (playheadTicks / ticksPerBeat) * beatWidth;
+
+    if (x < scrollX - 50 || x > scrollX + viewportWidth + 50) return;
+
+    const totalHeight = this.gridCanvas.height / this.devicePixelRatio;
+
+    ctx.fillStyle = 'rgba(255, 215, 0, 0.8)';
+    ctx.fillRect(x - 1, 0, 2, totalHeight);
+
+    ctx.beginPath();
+    ctx.moveTo(x - 6, 0);
+    ctx.lineTo(x + 6, 0);
+    ctx.lineTo(x, 8);
+    ctx.closePath();
+    ctx.fillStyle = '#ffd700';
+    ctx.fill();
+  }
+
+  renderSelectionBox(
+    box: { x: number; y: number; width: number; height: number } | null,
+    scrollX: number,
+    scrollY: number
+  ): void {
+    if (!box) return;
+
+    const ctx = this.gridCtx;
+    const { rowHeight, beatWidth, ticksPerBeat, minPitch } = this.config;
+
+    const x1 = Math.min(box.x, box.x + box.width);
+    const y1 = Math.min(box.y, box.y + box.height);
+    const x2 = Math.max(box.x, box.x + box.width);
+    const y2 = Math.max(box.y, box.y + box.height);
+
+    const startTick = Math.floor((x1 + scrollX) / beatWidth) * ticksPerBeat;
+    const endTick = Math.ceil((x2 + scrollX) / beatWidth) * ticksPerBeat;
+    const startPitch = Math.floor((y2 + scrollY) / rowHeight) + minPitch;
+    const endPitch = Math.ceil((y1 + scrollY) / rowHeight) + minPitch;
+
+    const rectX = (startTick / ticksPerBeat) * beatWidth - scrollX;
+    const rectY = (startPitch - minPitch) * rowHeight - scrollY;
+    const rectW = ((endTick - startTick) / ticksPerBeat) * beatWidth;
+    const rectH = (endPitch - startPitch) * rowHeight;
+
+    ctx.fillStyle = 'rgba(78, 205, 196, 0.15)';
+    ctx.fillRect(rectX, rectY, rectW, rectH);
+
+    ctx.strokeStyle = 'rgba(78, 205, 196, 0.8)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([5, 5]);
+    ctx.strokeRect(rectX, rectY, rectW, rectH);
+    ctx.setLineDash([]);
+  }
+
+  renderAll(
+    notes: Note[],
+    scrollX: number,
+    scrollY: number,
+    viewportWidth: number,
+    viewportHeight: number,
+    beatsPerMeasure: number,
+    bpm: number,
+    playheadTicks: number,
+    hoverPitch: number | null,
+    activePitches: Set<number>,
+    selectionBox: { x: number; y: number; width: number; height: number } | null
+  ): void {
+    this.renderGrid(scrollX, scrollY, viewportWidth, viewportHeight, beatsPerMeasure);
+    this.renderNotes(notes, scrollX, scrollY);
+    this.renderPlayhead(playheadTicks, scrollX, viewportWidth);
+    this.renderSelectionBox(selectionBox, scrollX, scrollY);
+    this.renderKeys(scrollY, hoverPitch, activePitches);
+    this.renderHeader(scrollX, bpm, beatsPerMeasure);
+  }
+}

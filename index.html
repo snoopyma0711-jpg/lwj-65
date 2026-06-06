@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MIDI Piano Roll Editor</title>
+  <link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+  <div id="app">
+    <header class="toolbar">
+      <div class="toolbar-left">
+        <button id="playBtn" class="btn btn-primary">▶ 播放</button>
+        <button id="stopBtn" class="btn">■ 停止</button>
+        <button id="undoBtn" class="btn">↶ 撤销</button>
+        <button id="redoBtn" class="btn">↷ 重做</button>
+      </div>
+      <div class="toolbar-center">
+        <label class="bpm-control">
+          BPM:
+          <input type="range" id="bpmSlider" min="60" max="200" value="120">
+          <span id="bpmValue">120</span>
+        </label>
+      </div>
+      <div class="toolbar-right">
+        <label class="btn file-label">
+          📂 导入MIDI
+          <input type="file" id="importMidi" accept=".mid,.midi" hidden>
+        </label>
+        <button id="exportBtn" class="btn">💾 导出MIDI</button>
+        <button id="clearBtn" class="btn btn-danger">🗑 清空</button>
+      </div>
+    </header>
+
+    <div class="piano-roll-container">
+      <canvas id="keysCanvas" class="keys-canvas"></canvas>
+      <div class="grid-wrapper">
+        <canvas id="headerCanvas" class="header-canvas"></canvas>
+        <div class="scroll-wrapper">
+          <canvas id="gridCanvas" class="grid-canvas"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <footer class="statusbar">
+      <span id="statusText">就绪</span>
+      <span id="selectionInfo">选择: 0 个音符</span>
+    </footer>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
