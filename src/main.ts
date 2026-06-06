@@ -272,7 +272,7 @@ function handleGridMouseMove(e: MouseEvent): void {
 
     for (const note of notes) {
       const noteX = (note.start / TICKS_PER_BEAT) * viewConfig.beatWidth;
-      const noteY = (note.pitch - viewConfig.minPitch) * viewConfig.rowHeight;
+      const noteY = (viewConfig.maxPitch - note.pitch) * viewConfig.rowHeight;
       const noteW = (note.duration / TICKS_PER_BEAT) * viewConfig.beatWidth;
       const noteH = viewConfig.rowHeight;
 
@@ -391,7 +391,7 @@ function findNoteAtPosition(x: number, y: number): Note | null {
   for (let i = notes.length - 1; i >= 0; i--) {
     const note = notes[i];
     const noteX = (note.start / TICKS_PER_BEAT) * viewConfig.beatWidth;
-    const noteY = (note.pitch - viewConfig.minPitch) * viewConfig.rowHeight;
+    const noteY = (viewConfig.maxPitch - note.pitch) * viewConfig.rowHeight;
     const noteW = (note.duration / TICKS_PER_BEAT) * viewConfig.beatWidth;
     const noteH = viewConfig.rowHeight;
 

@@ -68,16 +68,16 @@ export class PianoRollRenderer {
 
   renderKeys(scrollY: number, hoverPitch: number | null, activePitches: Set<number>): void {
     const ctx = this.keysCtx;
-    const { keysWidth, rowHeight, minPitch, totalKeys } = this.config;
+    const { keysWidth, rowHeight, minPitch, maxPitch, totalKeys } = this.config;
     const height = this.keysCanvas.height / this.devicePixelRatio;
 
     ctx.clearRect(0, 0, keysWidth, height);
 
-    const startPitch = minPitch + Math.floor(scrollY / rowHeight);
-    const endPitch = Math.min(minPitch + totalKeys, startPitch + Math.ceil(height / rowHeight) + 1);
+    const startPitch = maxPitch - Math.floor(scrollY / rowHeight);
+    const endPitch = Math.max(minPitch, startPitch - Math.ceil(height / rowHeight) - 1);
 
-    for (let pitch = startPitch; pitch <= endPitch; pitch++) {
-      const y = (pitch - minPitch) * rowHeight - scrollY;
+    for (let pitch = startPitch; pitch >= endPitch; pitch--) {
+      const y = (maxPitch - pitch) * rowHeight - scrollY;
       const isBlack = isBlackKey(pitch);
       const isHover = pitch === hoverPitch;
       const isActive = activePitches.has(pitch);
@@ -154,7 +154,7 @@ export class PianoRollRenderer {
     beatsPerMeasure: number
   ): void {
     const ctx = this.gridCtx;
-    const { rowHeight, beatWidth, minPitch, totalKeys } = this.config;
+    const { rowHeight, beatWidth, minPitch, maxPitch, totalKeys } = this.config;
     const totalHeight = totalKeys * rowHeight;
 
     ctx.clearRect(0, 0, this.gridCanvas.width / this.devicePixelRatio, this.gridCanvas.height / this.devicePixelRatio);
@@ -162,11 +162,11 @@ export class PianoRollRenderer {
     ctx.fillStyle = '#1a1a2e';
     ctx.fillRect(0, 0, this.gridCanvas.width, totalHeight);
 
-    const startPitch = minPitch;
-    const endPitch = minPitch + totalKeys;
+    const startPitch = maxPitch;
+    const endPitch = minPitch;
 
-    for (let pitch = startPitch; pitch < endPitch; pitch++) {
-      const y = (pitch - minPitch) * rowHeight;
+    for (let pitch = startPitch; pitch >= endPitch; pitch--) {
+      const y = (maxPitch - pitch) * rowHeight;
       const isBlack = isBlackKey(pitch);
 
       if (isBlack) {
@@ -217,11 +217,11 @@ export class PianoRollRenderer {
 
   renderNotes(notes: Note[], scrollX: number, scrollY: number): void {
     const ctx = this.gridCtx;
-    const { rowHeight, beatWidth, ticksPerBeat, minPitch, resizeHandleWidth } = this.config;
+    const { rowHeight, beatWidth, ticksPerBeat, maxPitch, resizeHandleWidth } = this.config;
 
     for (const note of notes) {
       const x = (note.start / ticksPerBeat) * beatWidth;
-      const y = (note.pitch - minPitch) * rowHeight + 1;
+      const y = (maxPitch - note.pitch) * rowHeight + 1;
       const width = (note.duration / ticksPerBeat) * beatWidth - 2;
       const height = rowHeight - 2;
 
@@ -294,7 +294,7 @@ export class PianoRollRenderer {
     if (!box) return;
 
     const ctx = this.gridCtx;
-    const { rowHeight, beatWidth, ticksPerBeat, minPitch } = this.config;
+    const { rowHeight, beatWidth, ticksPerBeat, minPitch, maxPitch } = this.config;
 
     const x1 = Math.min(box.x, box.x + box.width);
     const y1 = Math.min(box.y, box.y + box.height);
@@ -303,13 +303,13 @@ export class PianoRollRenderer {
 
     const startTick = Math.floor((x1 + scrollX) / beatWidth) * ticksPerBeat;
     const endTick = Math.ceil((x2 + scrollX) / beatWidth) * ticksPerBeat;
-    const startPitch = Math.floor((y2 + scrollY) / rowHeight) + minPitch;
-    const endPitch = Math.ceil((y1 + scrollY) / rowHeight) + minPitch;
+    const lowPitch = Math.max(minPitch, maxPitch - Math.floor((y2 + scrollY) / rowHeight));
+    const highPitch = Math.min(maxPitch, maxPitch - Math.ceil((y1 + scrollY) / rowHeight) + 1);
 
     const rectX = (startTick / ticksPerBeat) * beatWidth - scrollX;
-    const rectY = (startPitch - minPitch) * rowHeight - scrollY;
+    const rectY = (maxPitch - highPitch) * rowHeight - scrollY;
     const rectW = ((endTick - startTick) / ticksPerBeat) * beatWidth;
-    const rectH = (endPitch - startPitch) * rowHeight;
+    const rectH = (highPitch - lowPitch) * rowHeight;
 
     ctx.fillStyle = 'rgba(78, 205, 196, 0.15)';
     ctx.fillRect(rectX, rectY, rectW, rectH);
