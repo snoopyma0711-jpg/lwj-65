@@ -1,5 +1,5 @@
-import type { Note, ViewConfig, MouseState, Chord, GridSubdivision, RhythmPattern } from './types';
-import { generateId, pitchToName, isBlackKey } from './types';
+import type { Note, ViewConfig, MouseState, Chord, GridSubdivision, RhythmPattern, ScaleType } from './types';
+import { generateId, pitchToName, isBlackKey, SCALES, snapToScale, analyzeIntervals, isInScale } from './types';
 import { PianoRollRenderer } from './renderer';
 import { ChordDetector } from './chordDetector';
 import { player } from './player';
@@ -36,6 +36,9 @@ let renderer: PianoRollRenderer | null = null;
 let chordDetector: ChordDetector | null = null;
 let chords: Chord[] = [];
 let gridSubdivision: GridSubdivision = 4;
+let currentScale: ScaleType = 'none';
+let snapToScaleEnabled: boolean = true;
+let intervalPanelContent: HTMLElement;
 
 const rhythmPatterns: RhythmPattern[] = [
   {
@@ -123,6 +126,7 @@ function init(): void {
   scrollWrapper = document.querySelector('.scroll-wrapper') as HTMLDivElement;
   statusText = document.getElementById('statusText') as HTMLElement;
   selectionInfo = document.getElementById('selectionInfo') as HTMLElement;
+  intervalPanelContent = document.getElementById('intervalPanelContent') as HTMLElement;
 
   renderer = new PianoRollRenderer(keysCanvas, headerCanvas, chordBarCanvas, gridCanvas, velocityCanvas, viewConfig);
   chordDetector = new ChordDetector(TICKS_PER_BEAT);
@@ -254,6 +258,20 @@ function setupEventListeners(): void {
     player.setBpm(bpm);
     updateStatus(`BPM: ${bpm}`);
   });
+
+  const scaleSelect = document.getElementById('scaleSelect') as HTMLSelectElement;
+  scaleSelect.addEventListener('change', (e) => {
+    const value = (e.target as HTMLSelectElement).value as ScaleType;
+    currentScale = value;
+    updateStatus(currentScale === 'none' ? '音阶约束: 无约束' : `音阶约束: ${SCALES[currentScale].name}`);
+    render();
+  });
+
+  const snapToScaleToggle = document.getElementById('snapToScaleToggle') as HTMLInputElement;
+  snapToScaleToggle.addEventListener('change', (e) => {
+    snapToScaleEnabled = (e.target as HTMLInputElement).checked;
+    updateStatus(snapToScaleEnabled ? '自动吸附: 开启' : '自动吸附: 关闭');
+  });
 }
 
 function handleGridMouseDown(e: MouseEvent): void {
@@ -357,9 +375,15 @@ function handleGridMouseMove(e: MouseEvent): void {
       const orig = mouseState.originalNotes.find(n => n.id === selectedNotes[i].id);
       if (orig) {
         selectedNotes[i].start = Math.max(0, orig.start + dxTicks);
+        let newPitch = orig.pitch + dyPitches;
+        
+        if (snapToScaleEnabled && currentScale !== 'none') {
+          newPitch = snapToScale(newPitch, currentScale);
+        }
+        
         selectedNotes[i].pitch = Math.max(
           viewConfig.minPitch,
-          Math.min(viewConfig.maxPitch, orig.pitch + dyPitches)
+          Math.min(viewConfig.maxPitch, newPitch)
         );
       }
     }
@@ -792,9 +816,17 @@ function applyRhythmPattern(patternIndex: number): void {
 }
 
 function createNoteAtPosition(x: number, y: number): void {
-  const pitch = viewConfig.maxPitch - Math.floor(y / viewConfig.rowHeight);
+  let pitch = viewConfig.maxPitch - Math.floor(y / viewConfig.rowHeight);
   const start = snapToGrid(x);
   const duration = TICKS_PER_BEAT;
+
+  if (snapToScaleEnabled && currentScale !== 'none') {
+    const originalPitch = pitch;
+    pitch = snapToScale(pitch, currentScale);
+    if (pitch !== originalPitch) {
+      updateStatus(`吸附到音阶: ${pitchToName(originalPitch)} → ${pitchToName(pitch)}`);
+    }
+  }
 
   if (pitch >= viewConfig.minPitch && pitch <= viewConfig.maxPitch) {
     const newNote: Note = {
@@ -817,7 +849,9 @@ function createNoteAtPosition(x: number, y: number): void {
       render();
     }, 100);
 
-    updateStatus(`创建音符: ${pitchToName(pitch)}`);
+    if (!snapToScaleEnabled || currentScale === 'none') {
+      updateStatus(`创建音符: ${pitchToName(pitch)}`);
+    }
   }
 }
 
@@ -974,6 +1008,63 @@ function updateStatus(text: string): void {
   }
 }
 
+function updateIntervalPanel(): void {
+  if (!intervalPanelContent) return;
+
+  const selectedNotes = notes.filter(n => n.selected);
+
+  if (selectedNotes.length === 0) {
+    intervalPanelContent.innerHTML = `
+      <div class="interval-empty">
+        选择音符查看音程关系
+      </div>
+    `;
+    return;
+  }
+
+  const analysis = analyzeIntervals(selectedNotes);
+
+  let html = `
+    <div class="interval-note-list">
+      <div class="interval-note-list-title">选中音符 (${selectedNotes.length}个)</div>
+      <div class="interval-note-tags">
+        ${analysis.notes.map(name => `<span class="interval-note-tag">${name}</span>`).join('')}
+      </div>
+    </div>
+  `;
+
+  if (analysis.single && selectedNotes.length === 2) {
+    html += `
+      <div class="interval-result">
+        <div class="interval-result-title">音程关系</div>
+        <div class="interval-result-value">${analysis.single}</div>
+      </div>
+    `;
+  } else if (analysis.sequence && selectedNotes.length >= 3) {
+    html += `
+      <div class="interval-result">
+        <div class="interval-result-title">相邻音程序列</div>
+        <div class="interval-sequence" style="margin-top: 8px;">
+          ${analysis.sequence.map((name, i) => `
+            <div class="interval-sequence-item">
+              <span class="interval-sequence-notes">${analysis.notes[i]} → ${analysis.notes[i + 1]}</span>
+              <span class="interval-sequence-name">${name}</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  } else if (selectedNotes.length === 1) {
+    html += `
+      <div class="interval-empty">
+        请选择2个或更多音符<br>以查看音程关系
+      </div>
+    `;
+  }
+
+  intervalPanelContent.innerHTML = html;
+}
+
 function updateUI(): void {
   const selectedCount = notes.filter(n => n.selected).length;
   if (selectionInfo) {
@@ -984,6 +1075,8 @@ function updateUI(): void {
   const redoBtn = document.getElementById('redoBtn') as HTMLButtonElement;
   if (undoBtn) undoBtn.disabled = !history.canUndo();
   if (redoBtn) redoBtn.disabled = !history.canRedo();
+
+  updateIntervalPanel();
 }
 
 function render(): void {
@@ -1004,7 +1097,8 @@ function render(): void {
     player.getPlayhead(),
     hoverPitch,
     activePitches,
-    mouseState.selectionBox
+    mouseState.selectionBox,
+    currentScale
   );
 }
 

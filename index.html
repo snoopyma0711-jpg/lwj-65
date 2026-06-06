@@ -27,6 +27,24 @@
           </select>
         </label>
         <button id="quantizeBtn" class="btn">📏 量化</button>
+        <div class="divider"></div>
+        <label class="toolbar-select-label">
+          音阶:
+          <select id="scaleSelect" class="toolbar-select">
+            <option value="none">无约束</option>
+            <option value="C-major">C大调</option>
+            <option value="A-minor">A小调</option>
+            <option value="D-major">D大调</option>
+            <option value="G-minor">G小调</option>
+            <option value="pentatonic">五声音阶</option>
+            <option value="blues">布鲁斯音阶</option>
+          </select>
+        </label>
+        <label class="toggle-label">
+          <input type="checkbox" id="snapToScaleToggle" checked>
+          <span class="toggle-slider"></span>
+          自动吸附
+        </label>
       </div>
       <div class="toolbar-center">
         <label class="bpm-control">
@@ -67,6 +85,16 @@
           <canvas id="gridCanvas" class="grid-canvas"></canvas>
         </div>
         <canvas id="velocityCanvas" class="velocity-canvas"></canvas>
+      </div>
+      <div class="interval-panel" id="intervalPanel">
+        <div class="interval-panel-header">
+          <span>🎵 音程分析</span>
+        </div>
+        <div class="interval-panel-content" id="intervalPanelContent">
+          <div class="interval-empty">
+            选择音符查看音程关系
+          </div>
+        </div>
       </div>
     </div>
 

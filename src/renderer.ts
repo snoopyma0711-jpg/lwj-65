@@ -1,5 +1,5 @@
-import type { Note, ViewConfig, Chord } from './types';
-import { pitchToName, isBlackKey } from './types';
+import type { Note, ViewConfig, Chord, ScaleType } from './types';
+import { pitchToName, isBlackKey, isInScale } from './types';
 
 export class PianoRollRenderer {
   private keysCanvas: HTMLCanvasElement;
@@ -93,7 +93,7 @@ export class PianoRollRenderer {
     this.velocityCtx.scale(dpr, dpr);
   }
 
-  renderKeys(scrollY: number, hoverPitch: number | null, activePitches: Set<number>): void {
+  renderKeys(scrollY: number, hoverPitch: number | null, activePitches: Set<number>, scaleType: ScaleType): void {
     const ctx = this.keysCtx;
     const { keysWidth, rowHeight, minPitch, maxPitch, totalKeys } = this.config;
     const height = this.keysCanvas.height / this.devicePixelRatio;
@@ -108,31 +108,43 @@ export class PianoRollRenderer {
       const isBlack = isBlackKey(pitch);
       const isHover = pitch === hoverPitch;
       const isActive = activePitches.has(pitch);
+      const inScale = isInScale(pitch, scaleType);
+      const dimOpacity = inScale ? 1 : 0.35;
 
       if (isBlack) {
-        ctx.fillStyle = isActive ? '#e94560' : isHover ? '#3a3a5c' : '#2a2a4a';
+        let baseColor = isActive ? '#e94560' : isHover ? '#3a3a5c' : '#2a2a4a';
+        ctx.fillStyle = baseColor;
+        ctx.globalAlpha = dimOpacity;
         ctx.fillRect(0, y, keysWidth * 0.75, rowHeight);
+        ctx.globalAlpha = 1;
         ctx.strokeStyle = '#1a1a2e';
         ctx.lineWidth = 1;
         ctx.strokeRect(0, y, keysWidth * 0.75, rowHeight);
 
-        ctx.fillStyle = '#a0a0a0';
+        ctx.fillStyle = inScale ? '#a0a0a0' : '#505050';
+        ctx.globalAlpha = dimOpacity;
         ctx.font = '10px sans-serif';
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
         ctx.fillText(pitchToName(pitch), keysWidth - 5, y + rowHeight / 2);
+        ctx.globalAlpha = 1;
       } else {
-        ctx.fillStyle = isActive ? '#ff6b81' : isHover ? '#4a4a6c' : '#f0f0f0';
+        let baseColor = isActive ? '#ff6b81' : isHover ? '#4a4a6c' : '#f0f0f0';
+        ctx.fillStyle = baseColor;
+        ctx.globalAlpha = dimOpacity;
         ctx.fillRect(0, y, keysWidth, rowHeight);
+        ctx.globalAlpha = 1;
         ctx.strokeStyle = '#c0c0c0';
         ctx.lineWidth = 1;
         ctx.strokeRect(0, y, keysWidth, rowHeight);
 
-        ctx.fillStyle = isActive ? '#ffffff' : '#333333';
+        ctx.fillStyle = inScale ? (isActive ? '#ffffff' : '#333333') : '#707070';
+        ctx.globalAlpha = dimOpacity;
         ctx.font = 'bold 11px sans-serif';
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
         ctx.fillText(pitchToName(pitch), keysWidth - 5, y + rowHeight / 2);
+        ctx.globalAlpha = 1;
       }
     }
   }
@@ -178,7 +190,8 @@ export class PianoRollRenderer {
     scrollY: number,
     viewportWidth: number,
     viewportHeight: number,
-    beatsPerMeasure: number
+    beatsPerMeasure: number,
+    scaleType: ScaleType
   ): void {
     const ctx = this.gridCtx;
     const { rowHeight, beatWidth, minPitch, maxPitch, totalKeys } = this.config;
@@ -195,13 +208,17 @@ export class PianoRollRenderer {
     for (let pitch = startPitch; pitch >= endPitch; pitch--) {
       const y = (maxPitch - pitch) * rowHeight;
       const isBlack = isBlackKey(pitch);
+      const inScale = isInScale(pitch, scaleType);
 
       if (isBlack) {
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
+        ctx.fillStyle = inScale ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.3)';
+        ctx.fillRect(0, y, this.gridCanvas.width, rowHeight);
+      } else if (!inScale) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
         ctx.fillRect(0, y, this.gridCanvas.width, rowHeight);
       }
 
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+      ctx.strokeStyle = inScale ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 0.02)';
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(0, y);
@@ -531,13 +548,14 @@ export class PianoRollRenderer {
     playheadTicks: number,
     hoverPitch: number | null,
     activePitches: Set<number>,
-    selectionBox: { x: number; y: number; width: number; height: number } | null
+    selectionBox: { x: number; y: number; width: number; height: number } | null,
+    scaleType: ScaleType
   ): void {
-    this.renderGrid(scrollX, scrollY, viewportWidth, viewportHeight, beatsPerMeasure);
+    this.renderGrid(scrollX, scrollY, viewportWidth, viewportHeight, beatsPerMeasure, scaleType);
     this.renderNotes(notes, scrollX, scrollY);
     this.renderPlayhead(playheadTicks, scrollX, viewportWidth);
     this.renderSelectionBox(selectionBox, scrollX, scrollY);
-    this.renderKeys(scrollY, hoverPitch, activePitches);
+    this.renderKeys(scrollY, hoverPitch, activePitches, scaleType);
     this.renderHeader(scrollX, bpm, beatsPerMeasure);
     this.renderChordBar(chords, scrollX, beatsPerMeasure);
     this.renderVelocityEditor(notes, scrollX);
