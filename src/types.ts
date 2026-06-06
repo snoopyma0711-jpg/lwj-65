@@ -1,3 +1,15 @@
+export type WaveformType = 'sine' | 'square' | 'sawtooth' | 'triangle';
+
+export interface Track {
+  id: number;
+  name: string;
+  waveform: WaveformType;
+  volume: number;
+  muted: boolean;
+  solo: boolean;
+  color: string;
+}
+
 export interface Note {
   id: string;
   pitch: number;
@@ -5,7 +17,29 @@ export interface Note {
   duration: number;
   velocity: number;
   selected: boolean;
+  trackId: number;
 }
+
+export const TRACK_COLORS: string[] = [
+  '#e94560',
+  '#4ecdc4',
+  '#ffd93d',
+  '#6c5ce7',
+];
+
+export const DEFAULT_TRACKS: Track[] = [
+  { id: 0, name: 'Track 1', waveform: 'sawtooth', volume: 0.8, muted: false, solo: false, color: TRACK_COLORS[0] },
+  { id: 1, name: 'Track 2', waveform: 'square', volume: 0.7, muted: false, solo: false, color: TRACK_COLORS[1] },
+  { id: 2, name: 'Track 3', waveform: 'sine', volume: 0.6, muted: false, solo: false, color: TRACK_COLORS[2] },
+  { id: 3, name: 'Track 4', waveform: 'triangle', volume: 0.75, muted: false, solo: false, color: TRACK_COLORS[3] },
+];
+
+export const WAVEFORM_NAMES: Record<WaveformType, string> = {
+  'sine': '正弦波',
+  'square': '方波',
+  'sawtooth': '锯齿波',
+  'triangle': '三角波',
+};
 
 export interface ProjectState {
   notes: Note[];

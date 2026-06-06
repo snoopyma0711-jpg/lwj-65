@@ -1,5 +1,5 @@
-import type { Note, ViewConfig, MouseState, Chord, GridSubdivision, RhythmPattern, ScaleType } from './types';
-import { generateId, pitchToName, isBlackKey, SCALES, snapToScale, analyzeIntervals, isInScale } from './types';
+import type { Note, ViewConfig, MouseState, Chord, GridSubdivision, RhythmPattern, ScaleType, Track, WaveformType } from './types';
+import { generateId, pitchToName, isBlackKey, SCALES, snapToScale, analyzeIntervals, isInScale, DEFAULT_TRACKS, WAVEFORM_NAMES } from './types';
 import { PianoRollRenderer } from './renderer';
 import { ChordDetector } from './chordDetector';
 import { player } from './player';
@@ -39,6 +39,9 @@ let gridSubdivision: GridSubdivision = 4;
 let currentScale: ScaleType = 'none';
 let snapToScaleEnabled: boolean = true;
 let intervalPanelContent: HTMLElement;
+let tracks: Track[] = JSON.parse(JSON.stringify(DEFAULT_TRACKS));
+let currentTrackId: number = 0;
+let trackList: HTMLElement;
 
 const rhythmPatterns: RhythmPattern[] = [
   {
@@ -127,29 +130,33 @@ function init(): void {
   statusText = document.getElementById('statusText') as HTMLElement;
   selectionInfo = document.getElementById('selectionInfo') as HTMLElement;
   intervalPanelContent = document.getElementById('intervalPanelContent') as HTMLElement;
+  trackList = document.getElementById('trackList') as HTMLElement;
 
   renderer = new PianoRollRenderer(keysCanvas, headerCanvas, chordBarCanvas, gridCanvas, velocityCanvas, viewConfig);
   chordDetector = new ChordDetector(TICKS_PER_BEAT);
 
   notes = [
-    { id: generateId(), pitch: 60, start: 0, duration: TICKS_PER_BEAT, velocity: 80, selected: false },
-    { id: generateId(), pitch: 64, start: 0, duration: TICKS_PER_BEAT, velocity: 80, selected: false },
-    { id: generateId(), pitch: 67, start: 0, duration: TICKS_PER_BEAT, velocity: 80, selected: false },
-    { id: generateId(), pitch: 57, start: TICKS_PER_BEAT, duration: TICKS_PER_BEAT, velocity: 100, selected: false },
-    { id: generateId(), pitch: 60, start: TICKS_PER_BEAT, duration: TICKS_PER_BEAT, velocity: 100, selected: false },
-    { id: generateId(), pitch: 64, start: TICKS_PER_BEAT, duration: TICKS_PER_BEAT, velocity: 100, selected: false },
-    { id: generateId(), pitch: 62, start: TICKS_PER_BEAT * 2, duration: TICKS_PER_BEAT, velocity: 60, selected: false },
-    { id: generateId(), pitch: 65, start: TICKS_PER_BEAT * 2, duration: TICKS_PER_BEAT, velocity: 60, selected: false },
-    { id: generateId(), pitch: 69, start: TICKS_PER_BEAT * 2, duration: TICKS_PER_BEAT, velocity: 60, selected: false },
-    { id: generateId(), pitch: 67, start: TICKS_PER_BEAT * 3, duration: TICKS_PER_BEAT, velocity: 120, selected: false },
-    { id: generateId(), pitch: 71, start: TICKS_PER_BEAT * 3, duration: TICKS_PER_BEAT, velocity: 120, selected: false },
-    { id: generateId(), pitch: 74, start: TICKS_PER_BEAT * 3, duration: TICKS_PER_BEAT, velocity: 120, selected: false },
-    { id: generateId(), pitch: 77, start: TICKS_PER_BEAT * 3, duration: TICKS_PER_BEAT, velocity: 120, selected: false },
-    { id: generateId(), pitch: 57, start: TICKS_PER_BEAT * 4, duration: TICKS_PER_BEAT, velocity: 90, selected: false },
-    { id: generateId(), pitch: 60, start: TICKS_PER_BEAT * 4, duration: TICKS_PER_BEAT, velocity: 90, selected: false },
-    { id: generateId(), pitch: 64, start: TICKS_PER_BEAT * 4, duration: TICKS_PER_BEAT, velocity: 90, selected: false },
-    { id: generateId(), pitch: 67, start: TICKS_PER_BEAT * 4, duration: TICKS_PER_BEAT, velocity: 90, selected: false },
+    { id: generateId(), pitch: 60, start: 0, duration: TICKS_PER_BEAT, velocity: 80, selected: false, trackId: 0 },
+    { id: generateId(), pitch: 64, start: 0, duration: TICKS_PER_BEAT, velocity: 80, selected: false, trackId: 0 },
+    { id: generateId(), pitch: 67, start: 0, duration: TICKS_PER_BEAT, velocity: 80, selected: false, trackId: 0 },
+    { id: generateId(), pitch: 57, start: TICKS_PER_BEAT, duration: TICKS_PER_BEAT, velocity: 100, selected: false, trackId: 1 },
+    { id: generateId(), pitch: 60, start: TICKS_PER_BEAT, duration: TICKS_PER_BEAT, velocity: 100, selected: false, trackId: 1 },
+    { id: generateId(), pitch: 64, start: TICKS_PER_BEAT, duration: TICKS_PER_BEAT, velocity: 100, selected: false, trackId: 1 },
+    { id: generateId(), pitch: 62, start: TICKS_PER_BEAT * 2, duration: TICKS_PER_BEAT, velocity: 60, selected: false, trackId: 2 },
+    { id: generateId(), pitch: 65, start: TICKS_PER_BEAT * 2, duration: TICKS_PER_BEAT, velocity: 60, selected: false, trackId: 2 },
+    { id: generateId(), pitch: 69, start: TICKS_PER_BEAT * 2, duration: TICKS_PER_BEAT, velocity: 60, selected: false, trackId: 2 },
+    { id: generateId(), pitch: 67, start: TICKS_PER_BEAT * 3, duration: TICKS_PER_BEAT, velocity: 120, selected: false, trackId: 3 },
+    { id: generateId(), pitch: 71, start: TICKS_PER_BEAT * 3, duration: TICKS_PER_BEAT, velocity: 120, selected: false, trackId: 3 },
+    { id: generateId(), pitch: 74, start: TICKS_PER_BEAT * 3, duration: TICKS_PER_BEAT, velocity: 120, selected: false, trackId: 3 },
+    { id: generateId(), pitch: 77, start: TICKS_PER_BEAT * 3, duration: TICKS_PER_BEAT, velocity: 120, selected: false, trackId: 3 },
+    { id: generateId(), pitch: 57, start: TICKS_PER_BEAT * 4, duration: TICKS_PER_BEAT, velocity: 90, selected: false, trackId: 0 },
+    { id: generateId(), pitch: 60, start: TICKS_PER_BEAT * 4, duration: TICKS_PER_BEAT, velocity: 90, selected: false, trackId: 0 },
+    { id: generateId(), pitch: 64, start: TICKS_PER_BEAT * 4, duration: TICKS_PER_BEAT, velocity: 90, selected: false, trackId: 0 },
+    { id: generateId(), pitch: 67, start: TICKS_PER_BEAT * 4, duration: TICKS_PER_BEAT, velocity: 90, selected: false, trackId: 0 },
   ];
+
+  synth.setTracks(tracks);
+  renderTrackPanel();
 
   updateChords();
 
@@ -551,7 +558,7 @@ function handleKeysMouseDown(e: MouseEvent): void {
   const pitch = viewConfig.maxPitch - Math.floor(y / viewConfig.rowHeight);
 
   if (pitch >= viewConfig.minPitch && pitch <= viewConfig.maxPitch) {
-    synth.playNote(pitch, 0.5, 100);
+    synth.playNote(pitch, 0.5, 100, currentTrackId);
     activePitches.add(pitch);
     render();
 
@@ -560,7 +567,7 @@ function handleKeysMouseDown(e: MouseEvent): void {
       render();
     }, 500);
 
-    updateStatus(`点击: ${pitchToName(pitch)}`);
+    updateStatus(`点击: ${pitchToName(pitch)} (${tracks[currentTrackId].name})`);
   }
 }
 
@@ -783,6 +790,7 @@ function applyRhythmPattern(patternIndex: number): void {
           duration: snapTicksToGrid(duration),
           velocity: 100,
           selected: true,
+          trackId: currentTrackId,
         });
       }
     }
@@ -795,15 +803,16 @@ function applyRhythmPattern(patternIndex: number): void {
         const duration = Math.min(event.duration, remainingBeats - event.start) * TICKS_PER_BEAT;
 
         if (start + duration <= rangeEnd) {
-          notes.push({
-            id: generateId(),
-            pitch,
-            start: snapTicksToGrid(start),
-            duration: snapTicksToGrid(duration),
-            velocity: 100,
-            selected: true,
-          });
-        }
+        notes.push({
+          id: generateId(),
+          pitch,
+          start: snapTicksToGrid(start),
+          duration: snapTicksToGrid(duration),
+          velocity: 100,
+          selected: true,
+          trackId: currentTrackId,
+        });
+      }
       }
     }
   }
@@ -836,13 +845,14 @@ function createNoteAtPosition(x: number, y: number): void {
       duration,
       velocity: 100,
       selected: true,
+      trackId: currentTrackId,
     };
 
     notes.push(newNote);
     mouseState.targetNoteId = newNote.id;
     player.setNotes(notes);
 
-    synth.playNote(pitch, 0.1, 80);
+    synth.playNote(pitch, 0.1, 80, currentTrackId);
     activePitches.add(pitch);
     setTimeout(() => {
       activePitches.delete(pitch);
@@ -850,7 +860,7 @@ function createNoteAtPosition(x: number, y: number): void {
     }, 100);
 
     if (!snapToScaleEnabled || currentScale === 'none') {
-      updateStatus(`创建音符: ${pitchToName(pitch)}`);
+      updateStatus(`创建音符: ${pitchToName(pitch)} (${tracks[currentTrackId].name})`);
     }
   }
 }
@@ -1065,6 +1075,98 @@ function updateIntervalPanel(): void {
   intervalPanelContent.innerHTML = html;
 }
 
+function renderTrackPanel(): void {
+  if (!trackList) return;
+
+  trackList.innerHTML = '';
+
+  for (const track of tracks) {
+    const trackItem = document.createElement('div');
+    trackItem.className = `track-item${track.id === currentTrackId ? ' active' : ''}`;
+    trackItem.dataset.trackId = track.id.toString();
+
+    trackItem.innerHTML = `
+      <div class="track-header">
+        <div class="track-color-indicator" style="background-color: ${track.color}; color: ${track.color};"></div>
+        <span class="track-name">${track.name}</span>
+        <div class="track-buttons">
+          <button class="track-btn mute-btn${track.muted ? ' active' : ''}" data-action="mute" data-track-id="${track.id}" title="静音">M</button>
+          <button class="track-btn solo-btn${track.solo ? ' active' : ''}" data-action="solo" data-track-id="${track.id}" title="独奏">S</button>
+        </div>
+      </div>
+      <div class="track-controls">
+        <select class="track-waveform-select" data-action="waveform" data-track-id="${track.id}">
+          <option value="sine" ${track.waveform === 'sine' ? 'selected' : ''}>${WAVEFORM_NAMES['sine']}</option>
+          <option value="square" ${track.waveform === 'square' ? 'selected' : ''}>${WAVEFORM_NAMES['square']}</option>
+          <option value="sawtooth" ${track.waveform === 'sawtooth' ? 'selected' : ''}>${WAVEFORM_NAMES['sawtooth']}</option>
+          <option value="triangle" ${track.waveform === 'triangle' ? 'selected' : ''}>${WAVEFORM_NAMES['triangle']}</option>
+        </select>
+        <div class="track-volume-control">
+          <span class="track-volume-icon">🔊</span>
+          <input type="range" class="track-volume-slider" data-action="volume" data-track-id="${track.id}" 
+                 min="0" max="100" value="${Math.round(track.volume * 100)}">
+          <span class="track-volume-value">${Math.round(track.volume * 100)}</span>
+        </div>
+      </div>
+    `;
+
+    trackItem.addEventListener('click', (e) => {
+      if ((e.target as HTMLElement).closest('.track-buttons') || 
+          (e.target as HTMLElement).closest('.track-controls')) {
+        return;
+      }
+      currentTrackId = track.id;
+      updateStatus(`切换到 ${track.name}`);
+      renderTrackPanel();
+      render();
+    });
+
+    trackList.appendChild(trackItem);
+  }
+
+  trackList.querySelectorAll('[data-action]').forEach(el => {
+    const action = el.getAttribute('data-action');
+    const trackId = parseInt(el.getAttribute('data-track-id') || '0');
+
+    if (action === 'mute') {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        tracks[trackId].muted = !tracks[trackId].muted;
+        synth.setTracks(tracks);
+        updateStatus(`${tracks[trackId].name} ${tracks[trackId].muted ? '已静音' : '取消静音'}`);
+        renderTrackPanel();
+      });
+    } else if (action === 'solo') {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        tracks[trackId].solo = !tracks[trackId].solo;
+        synth.setTracks(tracks);
+        updateStatus(`${tracks[trackId].name} ${tracks[trackId].solo ? '独奏' : '取消独奏'}`);
+        renderTrackPanel();
+      });
+    } else if (action === 'waveform') {
+      el.addEventListener('change', (e) => {
+        e.stopPropagation();
+        const waveform = (e.target as HTMLSelectElement).value as WaveformType;
+        tracks[trackId].waveform = waveform;
+        synth.setTracks(tracks);
+        updateStatus(`${tracks[trackId].name} 音色: ${WAVEFORM_NAMES[waveform]}`);
+      });
+    } else if (action === 'volume') {
+      el.addEventListener('input', (e) => {
+        e.stopPropagation();
+        const volume = parseInt((e.target as HTMLInputElement).value) / 100;
+        tracks[trackId].volume = volume;
+        synth.setTracks(tracks);
+        const valueEl = (el as HTMLElement).parentElement?.querySelector('.track-volume-value');
+        if (valueEl) {
+          valueEl.textContent = Math.round(volume * 100).toString();
+        }
+      });
+    }
+  });
+}
+
 function updateUI(): void {
   const selectedCount = notes.filter(n => n.selected).length;
   if (selectionInfo) {
@@ -1098,7 +1200,9 @@ function render(): void {
     hoverPitch,
     activePitches,
     mouseState.selectionBox,
-    currentScale
+    currentScale,
+    tracks,
+    currentTrackId
   );
 }
 

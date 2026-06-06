@@ -148,7 +148,7 @@ export class Player {
       if (alreadyActive || alreadyScheduled) continue;
 
       if (noteStartTicks <= this.state.playheadTicks) {
-        synth.noteOn(noteId, note.pitch, note.velocity);
+        synth.noteOn(noteId, note.pitch, note.velocity, note.trackId);
         this.state.activeNoteIds.add(noteId);
 
         const remainingTicks = noteEndTicks - this.state.playheadTicks;
@@ -166,7 +166,7 @@ export class Player {
         const durationSeconds = this.ticksToSeconds(durationTicks);
 
         const noteOnId = window.setTimeout(() => {
-          synth.noteOn(noteId, note.pitch, note.velocity);
+          synth.noteOn(noteId, note.pitch, note.velocity, note.trackId);
           this.state.activeNoteIds.add(noteId);
 
           const noteOffId = window.setTimeout(() => {

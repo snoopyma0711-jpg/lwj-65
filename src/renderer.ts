@@ -1,5 +1,5 @@
-import type { Note, ViewConfig, Chord, ScaleType } from './types';
-import { pitchToName, isBlackKey, isInScale } from './types';
+import type { Note, ViewConfig, Chord, ScaleType, Track } from './types';
+import { pitchToName, isBlackKey, isInScale, TRACK_COLORS } from './types';
 
 export class PianoRollRenderer {
   private keysCanvas: HTMLCanvasElement;
@@ -259,7 +259,7 @@ export class PianoRollRenderer {
     }
   }
 
-  renderNotes(notes: Note[], scrollX: number, scrollY: number): void {
+  renderNotes(notes: Note[], scrollX: number, scrollY: number, tracks: Track[], currentTrackId: number): void {
     const ctx = this.gridCtx;
     const { rowHeight, beatWidth, ticksPerBeat, maxPitch, resizeHandleWidth } = this.config;
 
@@ -269,17 +269,20 @@ export class PianoRollRenderer {
       const width = (note.duration / ticksPerBeat) * beatWidth - 2;
       const height = rowHeight - 2;
 
-      const isBlack = isBlackKey(note.pitch);
-      const baseColor = isBlack ? '#e94560' : '#ff6b81';
-      const selectedColor = '#4ecdc4';
+      const track = tracks.find(t => t.id === note.trackId);
+      const trackColor = track?.color || TRACK_COLORS[note.trackId % TRACK_COLORS.length];
+      const isCurrentTrack = note.trackId === currentTrackId;
+      const opacity = isCurrentTrack ? 1 : 0.35;
+
+      ctx.globalAlpha = opacity;
 
       const gradient = ctx.createLinearGradient(x, y, x, y + height);
       if (note.selected) {
-        gradient.addColorStop(0, selectedColor);
+        gradient.addColorStop(0, '#4ecdc4');
         gradient.addColorStop(1, '#3db8b0');
       } else {
-        gradient.addColorStop(0, baseColor);
-        gradient.addColorStop(1, isBlack ? '#c73e54' : '#e05570');
+        gradient.addColorStop(0, trackColor);
+        gradient.addColorStop(1, this.darkenColor(trackColor, 0.15));
       }
 
       ctx.fillStyle = gradient;
@@ -297,9 +300,9 @@ export class PianoRollRenderer {
       }
 
       if (note.selected) {
-        ctx.shadowColor = selectedColor;
+        ctx.shadowColor = '#4ecdc4';
         ctx.shadowBlur = 10;
-        ctx.strokeStyle = selectedColor;
+        ctx.strokeStyle = '#4ecdc4';
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.roundRect(x, y, width, height, 3);
@@ -328,7 +331,17 @@ export class PianoRollRenderer {
       ctx.strokeStyle = note.selected ? '#6ee7de' : '#ffd700';
       ctx.lineWidth = 1;
       ctx.strokeRect(barX, barY, barWidth, barHeight);
+
+      ctx.globalAlpha = 1;
     }
+  }
+
+  private darkenColor(color: string, amount: number): string {
+    const hex = color.replace('#', '');
+    const r = Math.max(0, parseInt(hex.substr(0, 2), 16) - Math.floor(255 * amount));
+    const g = Math.max(0, parseInt(hex.substr(2, 2), 16) - Math.floor(255 * amount));
+    const b = Math.max(0, parseInt(hex.substr(4, 2), 16) - Math.floor(255 * amount));
+    return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
   }
 
   renderPlayhead(playheadTicks: number, scrollX: number, viewportWidth: number): void {
@@ -352,7 +365,7 @@ export class PianoRollRenderer {
     ctx.fill();
   }
 
-  renderVelocityEditor(notes: Note[], scrollX: number): void {
+  renderVelocityEditor(notes: Note[], scrollX: number, tracks: Track[], currentTrackId: number): void {
     const ctx = this.velocityCtx;
     const { beatWidth, ticksPerBeat, velocityEditorHeight } = this.config;
     const width = this.velocityCanvas.width / this.devicePixelRatio;
@@ -417,21 +430,30 @@ export class PianoRollRenderer {
 
       if (barX + barWidth < 0 || barX > width) continue;
 
+      const track = tracks.find(t => t.id === note.trackId);
+      const trackColor = track?.color || TRACK_COLORS[note.trackId % TRACK_COLORS.length];
+      const isCurrentTrack = note.trackId === currentTrackId;
+      const opacity = isCurrentTrack ? 1 : 0.35;
+
+      ctx.globalAlpha = opacity;
+
       const barGradient = ctx.createLinearGradient(barX, barY, barX, barBaseY);
       if (note.selected) {
         barGradient.addColorStop(0, '#6ee7de');
         barGradient.addColorStop(1, '#4ecdc4');
       } else {
-        barGradient.addColorStop(0, '#707070');
-        barGradient.addColorStop(1, '#505050');
+        barGradient.addColorStop(0, trackColor);
+        barGradient.addColorStop(1, this.darkenColor(trackColor, 0.3));
       }
 
       ctx.fillStyle = barGradient;
       ctx.fillRect(barX, barY, barWidth, barHeight);
 
-      ctx.strokeStyle = note.selected ? '#6ee7de' : '#808080';
+      ctx.strokeStyle = note.selected ? '#6ee7de' : trackColor;
       ctx.lineWidth = 1;
       ctx.strokeRect(barX, barY, barWidth, barHeight);
+
+      ctx.globalAlpha = 1;
     }
   }
 
@@ -549,16 +571,18 @@ export class PianoRollRenderer {
     hoverPitch: number | null,
     activePitches: Set<number>,
     selectionBox: { x: number; y: number; width: number; height: number } | null,
-    scaleType: ScaleType
+    scaleType: ScaleType,
+    tracks: Track[],
+    currentTrackId: number
   ): void {
     this.renderGrid(scrollX, scrollY, viewportWidth, viewportHeight, beatsPerMeasure, scaleType);
-    this.renderNotes(notes, scrollX, scrollY);
+    this.renderNotes(notes, scrollX, scrollY, tracks, currentTrackId);
     this.renderPlayhead(playheadTicks, scrollX, viewportWidth);
     this.renderSelectionBox(selectionBox, scrollX, scrollY);
     this.renderKeys(scrollY, hoverPitch, activePitches, scaleType);
     this.renderHeader(scrollX, bpm, beatsPerMeasure);
     this.renderChordBar(chords, scrollX, beatsPerMeasure);
-    this.renderVelocityEditor(notes, scrollX);
+    this.renderVelocityEditor(notes, scrollX, tracks, currentTrackId);
     this.renderVelocityPlayhead(playheadTicks, scrollX);
   }
 }

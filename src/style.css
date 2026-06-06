@@ -419,3 +419,223 @@ body {
     width: 180px;
   }
 }
+
+.track-panel {
+  flex-shrink: 0;
+  background: #16213e;
+  border-bottom: 1px solid #0f3460;
+  display: flex;
+  flex-direction: column;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.track-panel-header {
+  padding: 10px 12px;
+  background: #0f3460;
+  font-weight: bold;
+  font-size: 13px;
+  color: #e94560;
+  border-bottom: 1px solid #1a5276;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.track-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.track-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px;
+}
+
+.track-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: #1a1a2e;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.track-item:hover {
+  background: #1f1f3a;
+}
+
+.track-item.active {
+  border-color: #e94560;
+  background: rgba(233, 69, 96, 0.1);
+}
+
+.track-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.track-color-indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 4px currentColor;
+}
+
+.track-name {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 600;
+  color: #e0e0e0;
+}
+
+.track-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.track-btn {
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  background: #0f3460;
+  color: #707070;
+  font-size: 10px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  padding: 0;
+}
+
+.track-btn:hover {
+  background: #1a5276;
+  color: #e0e0e0;
+}
+
+.track-btn.mute-btn.active {
+  background: #e74c3c;
+  color: #ffffff;
+}
+
+.track-btn.solo-btn.active {
+  background: #f39c12;
+  color: #ffffff;
+}
+
+.track-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.track-waveform-select {
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid #0f3460;
+  border-radius: 4px;
+  background: #0f3460;
+  color: #e0e0e0;
+  font-size: 11px;
+  cursor: pointer;
+  outline: none;
+}
+
+.track-waveform-select:hover {
+  border-color: #1a5276;
+}
+
+.track-waveform-select:focus {
+  border-color: #e94560;
+}
+
+.track-waveform-select option {
+  background: #0f3460;
+  color: #e0e0e0;
+}
+
+.track-volume-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.track-volume-icon {
+  font-size: 11px;
+  color: #707070;
+  width: 14px;
+  flex-shrink: 0;
+}
+
+.track-volume-slider {
+  flex: 1;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: #0f3460;
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+.track-volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #e94560;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.track-volume-slider::-webkit-slider-thumb:hover {
+  background: #ff6b81;
+  transform: scale(1.2);
+}
+
+.track-volume-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #e94560;
+  cursor: pointer;
+  border: none;
+}
+
+.track-volume-value {
+  font-size: 10px;
+  color: #707070;
+  min-width: 28px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.track-panel::-webkit-scrollbar {
+  width: 6px;
+}
+
+.track-panel::-webkit-scrollbar-track {
+  background: #16213e;
+}
+
+.track-panel::-webkit-scrollbar-thumb {
+  background: #0f3460;
+  border-radius: 3px;
+}
+
+.track-panel::-webkit-scrollbar-thumb:hover {
+  background: #1a5276;
+}

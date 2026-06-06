@@ -93,6 +93,7 @@ export function parseMidi(data: ArrayBuffer): MidiParseResult {
 
     let runningStatus: number | null = null;
     let currentTime = 0;
+    const trackId = track % 4;
 
     while (offset < trackEnd) {
       const { value: deltaTime, offset: newOffset } = readVariableLength(array, offset);
@@ -125,6 +126,7 @@ export function parseMidi(data: ArrayBuffer): MidiParseResult {
                 duration,
                 velocity: active.velocity,
                 selected: false,
+                trackId,
               });
             }
             activeNotes.delete(pitch);
@@ -146,6 +148,7 @@ export function parseMidi(data: ArrayBuffer): MidiParseResult {
               duration,
               velocity: active.velocity,
               selected: false,
+              trackId,
             });
           }
           activeNotes.delete(pitch);
@@ -184,6 +187,7 @@ export function parseMidi(data: ArrayBuffer): MidiParseResult {
       duration: ticksPerQuarter,
       velocity: active.velocity,
       selected: false,
+      trackId: 0,
     });
   }
 

@@ -1,9 +1,10 @@
-import type { Note } from './types';
+import type { Note, Track, WaveformType } from './types';
 
 export class Synthesizer {
   private audioContext: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   private activeNotes: Map<string, { oscillators: OscillatorNode[]; gain: GainNode }> = new Map();
+  private tracks: Track[] = [];
 
   async init(): Promise<void> {
     if (this.audioContext) return;
@@ -22,40 +23,54 @@ export class Synthesizer {
     }
   }
 
+  setTracks(tracks: Track[]): void {
+    this.tracks = tracks;
+  }
+
+  private hasSoloTrack(): boolean {
+    return this.tracks.some(t => t.solo);
+  }
+
+  private isTrackPlayable(trackId: number): boolean {
+    const track = this.tracks.find(t => t.id === trackId);
+    if (!track) return false;
+    
+    if (this.hasSoloTrack()) {
+      return track.solo && !track.muted;
+    }
+    return !track.muted;
+  }
+
   pitchToFrequency(pitch: number): number {
     return 440 * Math.pow(2, (pitch - 69) / 12);
   }
 
-  noteOn(noteId: string, pitch: number, velocity: number = 100): void {
+  noteOn(noteId: string, pitch: number, velocity: number = 100, trackId: number = 0): void {
     if (!this.audioContext || !this.masterGain) return;
 
+    if (!this.isTrackPlayable(trackId)) return;
+
+    const track = this.tracks.find(t => t.id === trackId);
+    const waveform: WaveformType = track?.waveform || 'sawtooth';
+    const trackVolume = track?.volume ?? 0.8;
+
     const freq = this.pitchToFrequency(pitch);
-    const gainValue = (velocity / 127) * 0.5;
+    const gainValue = (velocity / 127) * 0.5 * trackVolume;
 
     const osc1 = this.audioContext.createOscillator();
-    osc1.type = 'sawtooth';
+    osc1.type = waveform;
     osc1.frequency.value = freq;
-
-    const osc2 = this.audioContext.createOscillator();
-    osc2.type = 'square';
-    osc2.frequency.value = freq * 2;
 
     const gainNode = this.audioContext.createGain();
     gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
     gainNode.gain.linearRampToValueAtTime(gainValue, this.audioContext.currentTime + 0.01);
 
-    const osc2Gain = this.audioContext.createGain();
-    osc2Gain.gain.value = 0.3;
-
     osc1.connect(gainNode);
-    osc2.connect(osc2Gain);
-    osc2Gain.connect(gainNode);
     gainNode.connect(this.masterGain);
 
     osc1.start();
-    osc2.start();
 
-    this.activeNotes.set(noteId, { oscillators: [osc1, osc2], gain: gainNode });
+    this.activeNotes.set(noteId, { oscillators: [osc1], gain: gainNode });
   }
 
   noteOff(noteId: string): void {
@@ -73,10 +88,10 @@ export class Synthesizer {
     this.activeNotes.delete(noteId);
   }
 
-  playNote(pitch: number, duration: number = 0.5, velocity: number = 100): void {
+  playNote(pitch: number, duration: number = 0.5, velocity: number = 100, trackId: number = 0): void {
     this.ensureContext();
     const noteId = `preview_${Date.now()}_${Math.random()}`;
-    this.noteOn(noteId, pitch, velocity);
+    this.noteOn(noteId, pitch, velocity, trackId);
     setTimeout(() => this.noteOff(noteId), duration * 1000);
   }
 
