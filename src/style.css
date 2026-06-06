@@ -144,6 +144,16 @@ body {
   border-bottom: 1px solid #0f3460;
 }
 
+.chord-bar-canvas {
+  flex-shrink: 0;
+  background: #121225;
+  border-bottom: 1px solid #0f3460;
+  cursor: pointer;
+  position: relative;
+  z-index: 10;
+  pointer-events: auto;
+}
+
 .scroll-wrapper {
   flex: 4;
   overflow: auto;

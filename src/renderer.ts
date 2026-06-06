@@ -1,13 +1,15 @@
-import type { Note, ViewConfig } from './types';
+import type { Note, ViewConfig, Chord } from './types';
 import { pitchToName, isBlackKey } from './types';
 
 export class PianoRollRenderer {
   private keysCanvas: HTMLCanvasElement;
   private headerCanvas: HTMLCanvasElement;
+  private chordBarCanvas: HTMLCanvasElement;
   private gridCanvas: HTMLCanvasElement;
   private velocityCanvas: HTMLCanvasElement;
   private keysCtx: CanvasRenderingContext2D;
   private headerCtx: CanvasRenderingContext2D;
+  private chordBarCtx: CanvasRenderingContext2D;
   private gridCtx: CanvasRenderingContext2D;
   private velocityCtx: CanvasRenderingContext2D;
   private config: ViewConfig;
@@ -16,12 +18,14 @@ export class PianoRollRenderer {
   constructor(
     keysCanvas: HTMLCanvasElement,
     headerCanvas: HTMLCanvasElement,
+    chordBarCanvas: HTMLCanvasElement,
     gridCanvas: HTMLCanvasElement,
     velocityCanvas: HTMLCanvasElement,
     config: ViewConfig
   ) {
     this.keysCanvas = keysCanvas;
     this.headerCanvas = headerCanvas;
+    this.chordBarCanvas = chordBarCanvas;
     this.gridCanvas = gridCanvas;
     this.velocityCanvas = velocityCanvas;
     this.config = config;
@@ -29,15 +33,17 @@ export class PianoRollRenderer {
 
     const keysCtx = keysCanvas.getContext('2d');
     const headerCtx = headerCanvas.getContext('2d');
+    const chordBarCtx = chordBarCanvas.getContext('2d');
     const gridCtx = gridCanvas.getContext('2d');
     const velocityCtx = velocityCanvas.getContext('2d');
 
-    if (!keysCtx || !headerCtx || !gridCtx || !velocityCtx) {
+    if (!keysCtx || !headerCtx || !chordBarCtx || !gridCtx || !velocityCtx) {
       throw new Error('Failed to get canvas contexts');
     }
 
     this.keysCtx = keysCtx;
     this.headerCtx = headerCtx;
+    this.chordBarCtx = chordBarCtx;
     this.gridCtx = gridCtx;
     this.velocityCtx = velocityCtx;
   }
@@ -53,7 +59,8 @@ export class PianoRollRenderer {
   resize(containerWidth: number, containerHeight: number, totalWidth: number, totalHeight: number): void {
     const dpr = this.devicePixelRatio;
     const velocityHeight = this.config.velocityEditorHeight;
-    const visibleGridHeight = containerHeight - this.config.headerHeight - velocityHeight;
+    const chordBarHeight = this.config.chordBarHeight;
+    const visibleGridHeight = containerHeight - this.config.headerHeight - chordBarHeight - velocityHeight;
 
     this.keysCanvas.width = this.config.keysWidth * dpr;
     this.keysCanvas.height = visibleGridHeight * dpr;
@@ -66,6 +73,12 @@ export class PianoRollRenderer {
     this.headerCanvas.style.width = `${containerWidth}px`;
     this.headerCanvas.style.height = `${this.config.headerHeight}px`;
     this.headerCtx.scale(dpr, dpr);
+
+    this.chordBarCanvas.width = containerWidth * dpr;
+    this.chordBarCanvas.height = chordBarHeight * dpr;
+    this.chordBarCanvas.style.width = `${containerWidth}px`;
+    this.chordBarCanvas.style.height = `${chordBarHeight}px`;
+    this.chordBarCtx.scale(dpr, dpr);
 
     this.gridCanvas.width = totalWidth * dpr;
     this.gridCanvas.height = totalHeight * dpr;
@@ -450,8 +463,65 @@ export class PianoRollRenderer {
     ctx.setLineDash([]);
   }
 
+  renderChordBar(chords: Chord[], scrollX: number, beatsPerMeasure: number): void {
+    const ctx = this.chordBarCtx;
+    const { beatWidth, chordBarHeight } = this.config;
+    const width = this.chordBarCanvas.width / this.devicePixelRatio;
+
+    ctx.clearRect(0, 0, width, chordBarHeight);
+
+    ctx.fillStyle = '#121225';
+    ctx.fillRect(0, 0, width, chordBarHeight);
+
+    const totalBeats = Math.ceil((width + scrollX) / beatWidth);
+    const startBeat = Math.floor(scrollX / beatWidth);
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.lineWidth = 1;
+    for (let beat = startBeat; beat <= startBeat + totalBeats + 1; beat++) {
+      const x = beat * beatWidth - scrollX;
+      const beatInMeasure = beat % beatsPerMeasure;
+
+      if (beatInMeasure === 0) {
+        ctx.strokeStyle = 'rgba(233, 69, 96, 0.4)';
+        ctx.lineWidth = 2;
+      } else {
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+        ctx.lineWidth = 1;
+      }
+
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, chordBarHeight);
+      ctx.stroke();
+    }
+
+    for (const chord of chords) {
+      const x = chord.beat * beatWidth - scrollX;
+      const chordWidth = beatWidth;
+
+      if (x + chordWidth < 0 || x > width) continue;
+
+      const hasSelection = chord.name !== '?';
+
+      ctx.fillStyle = hasSelection ? 'rgba(78, 205, 196, 0.15)' : 'rgba(255, 255, 255, 0.03)';
+      ctx.fillRect(x + 2, 2, chordWidth - 4, chordBarHeight - 4);
+
+      ctx.strokeStyle = hasSelection ? 'rgba(78, 205, 196, 0.6)' : 'rgba(255, 255, 255, 0.1)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x + 2, 2, chordWidth - 4, chordBarHeight - 4);
+
+      ctx.fillStyle = chord.name === '?' ? '#707070' : '#4ecdc4';
+      ctx.font = 'bold 12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(chord.name, x + chordWidth / 2, chordBarHeight / 2);
+    }
+  }
+
   renderAll(
     notes: Note[],
+    chords: Chord[],
     scrollX: number,
     scrollY: number,
     viewportWidth: number,
@@ -469,6 +539,7 @@ export class PianoRollRenderer {
     this.renderSelectionBox(selectionBox, scrollX, scrollY);
     this.renderKeys(scrollY, hoverPitch, activePitches);
     this.renderHeader(scrollX, bpm, beatsPerMeasure);
+    this.renderChordBar(chords, scrollX, beatsPerMeasure);
     this.renderVelocityEditor(notes, scrollX);
     this.renderVelocityPlayhead(playheadTicks, scrollX);
   }

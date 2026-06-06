@@ -1,6 +1,7 @@
-import type { Note, ViewConfig, MouseState } from './types';
+import type { Note, ViewConfig, MouseState, Chord } from './types';
 import { generateId, pitchToName, isBlackKey } from './types';
 import { PianoRollRenderer } from './renderer';
+import { ChordDetector } from './chordDetector';
 import { player } from './player';
 import { synth } from './synth';
 import { history } from './history';
@@ -14,6 +15,7 @@ const TICKS_PER_BEAT = 480;
 const viewConfig: ViewConfig = {
   keysWidth: 80,
   headerHeight: 40,
+  chordBarHeight: 32,
   rowHeight: 20,
   beatWidth: 80,
   ticksPerBeat: TICKS_PER_BEAT,
@@ -31,6 +33,8 @@ let scrollY = 0;
 let hoverPitch: number | null = null;
 let activePitches: Set<number> = new Set();
 let renderer: PianoRollRenderer | null = null;
+let chordDetector: ChordDetector | null = null;
+let chords: Chord[] = [];
 
 const mouseState: MouseState = {
   mode: 'idle',
@@ -45,6 +49,7 @@ const mouseState: MouseState = {
 
 let keysCanvas: HTMLCanvasElement;
 let headerCanvas: HTMLCanvasElement;
+let chordBarCanvas: HTMLCanvasElement;
 let gridCanvas: HTMLCanvasElement;
 let velocityCanvas: HTMLCanvasElement;
 let scrollWrapper: HTMLDivElement;
@@ -54,21 +59,37 @@ let selectionInfo: HTMLElement;
 function init(): void {
   keysCanvas = document.getElementById('keysCanvas') as HTMLCanvasElement;
   headerCanvas = document.getElementById('headerCanvas') as HTMLCanvasElement;
+  chordBarCanvas = document.getElementById('chordBarCanvas') as HTMLCanvasElement;
   gridCanvas = document.getElementById('gridCanvas') as HTMLCanvasElement;
   velocityCanvas = document.getElementById('velocityCanvas') as HTMLCanvasElement;
   scrollWrapper = document.querySelector('.scroll-wrapper') as HTMLDivElement;
   statusText = document.getElementById('statusText') as HTMLElement;
   selectionInfo = document.getElementById('selectionInfo') as HTMLElement;
 
-  renderer = new PianoRollRenderer(keysCanvas, headerCanvas, gridCanvas, velocityCanvas, viewConfig);
+  renderer = new PianoRollRenderer(keysCanvas, headerCanvas, chordBarCanvas, gridCanvas, velocityCanvas, viewConfig);
+  chordDetector = new ChordDetector(TICKS_PER_BEAT);
 
   notes = [
     { id: generateId(), pitch: 60, start: 0, duration: TICKS_PER_BEAT, velocity: 80, selected: false },
-    { id: generateId(), pitch: 62, start: TICKS_PER_BEAT, duration: TICKS_PER_BEAT, velocity: 100, selected: false },
-    { id: generateId(), pitch: 64, start: TICKS_PER_BEAT * 2, duration: TICKS_PER_BEAT, velocity: 60, selected: false },
-    { id: generateId(), pitch: 65, start: TICKS_PER_BEAT * 3, duration: TICKS_PER_BEAT, velocity: 120, selected: false },
-    { id: generateId(), pitch: 67, start: TICKS_PER_BEAT * 4, duration: TICKS_PER_BEAT * 2, velocity: 90, selected: false },
+    { id: generateId(), pitch: 64, start: 0, duration: TICKS_PER_BEAT, velocity: 80, selected: false },
+    { id: generateId(), pitch: 67, start: 0, duration: TICKS_PER_BEAT, velocity: 80, selected: false },
+    { id: generateId(), pitch: 57, start: TICKS_PER_BEAT, duration: TICKS_PER_BEAT, velocity: 100, selected: false },
+    { id: generateId(), pitch: 60, start: TICKS_PER_BEAT, duration: TICKS_PER_BEAT, velocity: 100, selected: false },
+    { id: generateId(), pitch: 64, start: TICKS_PER_BEAT, duration: TICKS_PER_BEAT, velocity: 100, selected: false },
+    { id: generateId(), pitch: 62, start: TICKS_PER_BEAT * 2, duration: TICKS_PER_BEAT, velocity: 60, selected: false },
+    { id: generateId(), pitch: 65, start: TICKS_PER_BEAT * 2, duration: TICKS_PER_BEAT, velocity: 60, selected: false },
+    { id: generateId(), pitch: 69, start: TICKS_PER_BEAT * 2, duration: TICKS_PER_BEAT, velocity: 60, selected: false },
+    { id: generateId(), pitch: 67, start: TICKS_PER_BEAT * 3, duration: TICKS_PER_BEAT, velocity: 120, selected: false },
+    { id: generateId(), pitch: 71, start: TICKS_PER_BEAT * 3, duration: TICKS_PER_BEAT, velocity: 120, selected: false },
+    { id: generateId(), pitch: 74, start: TICKS_PER_BEAT * 3, duration: TICKS_PER_BEAT, velocity: 120, selected: false },
+    { id: generateId(), pitch: 77, start: TICKS_PER_BEAT * 3, duration: TICKS_PER_BEAT, velocity: 120, selected: false },
+    { id: generateId(), pitch: 57, start: TICKS_PER_BEAT * 4, duration: TICKS_PER_BEAT, velocity: 90, selected: false },
+    { id: generateId(), pitch: 60, start: TICKS_PER_BEAT * 4, duration: TICKS_PER_BEAT, velocity: 90, selected: false },
+    { id: generateId(), pitch: 64, start: TICKS_PER_BEAT * 4, duration: TICKS_PER_BEAT, velocity: 90, selected: false },
+    { id: generateId(), pitch: 67, start: TICKS_PER_BEAT * 4, duration: TICKS_PER_BEAT, velocity: 90, selected: false },
   ];
+
+  updateChords();
 
   setupEventListeners();
   resizeCanvases();
@@ -92,12 +113,17 @@ function resizeCanvases(): void {
 
   const container = document.querySelector('.grid-wrapper') as HTMLElement;
   const containerWidth = container.clientWidth;
-  const containerHeight = container.clientHeight - viewConfig.headerHeight;
+  const containerHeight = container.clientHeight - viewConfig.headerHeight - viewConfig.chordBarHeight;
 
   const totalWidth = viewConfig.beatWidth * BEATS_PER_MEASURE * TOTAL_MEASURES;
   const pianoRollHeight = viewConfig.rowHeight * viewConfig.totalKeys;
 
-  renderer.resize(containerWidth, containerHeight + viewConfig.headerHeight, totalWidth, pianoRollHeight);
+  renderer.resize(containerWidth, containerHeight + viewConfig.headerHeight + viewConfig.chordBarHeight, totalWidth, pianoRollHeight);
+}
+
+function updateChords(): void {
+  if (!chordDetector) return;
+  chords = chordDetector.detectChords(notes);
 }
 
 function setupEventListeners(): void {
@@ -130,7 +156,10 @@ function setupEventListeners(): void {
   });
 
   gridCanvas.addEventListener('contextmenu', (e) => e.preventDefault());
+  chordBarCanvas.addEventListener('contextmenu', (e) => e.preventDefault());
   window.addEventListener('keydown', handleKeyDown);
+
+  chordBarCanvas.addEventListener('mousedown', handleChordBarMouseDown);
 
   document.getElementById('playBtn')?.addEventListener('click', togglePlay);
   document.getElementById('stopBtn')?.addEventListener('click', stopPlayback);
@@ -240,6 +269,7 @@ function handleGridMouseMove(e: MouseEvent): void {
       note.start = Math.min(startTick, endTick);
       note.duration = Math.max(Math.abs(endTick - startTick), TICKS_PER_BEAT / 4);
       player.setNotes(notes);
+      updateChords();
     }
   }
 
@@ -259,6 +289,7 @@ function handleGridMouseMove(e: MouseEvent): void {
       }
     }
     player.setNotes(notes);
+    updateChords();
   }
 
   if (mouseState.mode === 'resizing' && mouseState.targetNoteId) {
@@ -272,6 +303,7 @@ function handleGridMouseMove(e: MouseEvent): void {
       }
     }
     player.setNotes(notes);
+    updateChords();
   }
 
   if (mouseState.mode === 'selecting') {
@@ -406,6 +438,7 @@ function handleMouseUp(): void {
   mouseState.selectionBox = null;
   mouseState.originalNotes = [];
 
+  updateChords();
   updateUI();
   render();
 }
@@ -593,6 +626,7 @@ function deleteSelected(): void {
   history.pushState(notes);
   notes = notes.filter(n => !n.selected);
   player.setNotes(notes);
+  updateChords();
 
   updateStatus(`删除 ${selectedCount} 个音符`);
   updateUI();
@@ -606,6 +640,7 @@ function clearAll(): void {
   history.pushState(notes);
   notes = [];
   player.setNotes(notes);
+  updateChords();
 
   updateStatus('已清空所有音符');
   updateUI();
@@ -617,6 +652,7 @@ function undo(): void {
   if (result) {
     notes = result;
     player.setNotes(notes);
+    updateChords();
     updateStatus('撤销');
     updateUI();
     render();
@@ -628,6 +664,7 @@ function redo(): void {
   if (result) {
     notes = result;
     player.setNotes(notes);
+    updateChords();
     updateStatus('重做');
     updateUI();
     render();
@@ -693,6 +730,7 @@ async function handleImportMidi(e: Event): Promise<void> {
     bpmValue.textContent = bpm.toString();
     player.setBpm(bpm);
     player.setNotes(notes);
+    updateChords();
 
     updateStatus(`导入成功: ${notes.length} 个音符, BPM ${bpm}`);
     updateUI();
@@ -739,6 +777,7 @@ function render(): void {
 
   renderer.renderAll(
     notes,
+    chords,
     scrollX,
     scrollY,
     viewportWidth,
@@ -750,6 +789,31 @@ function render(): void {
     activePitches,
     mouseState.selectionBox
   );
+}
+
+function handleChordBarMouseDown(e: MouseEvent): void {
+  e.preventDefault();
+  e.stopPropagation();
+  synth.ensureContext();
+
+  const rect = chordBarCanvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const canvasX = x + scrollX;
+  const beat = Math.floor(canvasX / viewConfig.beatWidth);
+
+  const clickedChord = chords.find(c => c.beat === beat);
+
+  if (clickedChord) {
+    clearSelection();
+    for (const note of notes) {
+      if (clickedChord.noteIds.includes(note.id)) {
+        note.selected = true;
+      }
+    }
+    updateStatus(`选中和弦: ${clickedChord.name}, ${clickedChord.noteIds.length} 个音符`);
+    updateUI();
+    render();
+  }
 }
 
 window.addEventListener('DOMContentLoaded', init);

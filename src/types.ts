@@ -19,6 +19,7 @@ export interface ProjectState {
 export interface ViewConfig {
   keysWidth: number;
   headerHeight: number;
+  chordBarHeight: number;
   rowHeight: number;
   beatWidth: number;
   ticksPerBeat: number;
@@ -53,6 +54,14 @@ export interface HistoryState {
   past: Note[][];
   future: Note[][];
 }
+
+export interface Chord {
+  beat: number;
+  name: string;
+  noteIds: string[];
+}
+
+export type ChordType = 'major' | 'minor' | 'dominant7' | 'minor7' | 'unknown';
 
 export const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
