@@ -73,9 +73,9 @@ export class PianoRollRenderer {
     this.gridCanvas.style.height = `${totalHeight}px`;
     this.gridCtx.scale(dpr, dpr);
 
-    this.velocityCanvas.width = totalWidth * dpr;
+    this.velocityCanvas.width = containerWidth * dpr;
     this.velocityCanvas.height = velocityHeight * dpr;
-    this.velocityCanvas.style.width = `${totalWidth}px`;
+    this.velocityCanvas.style.width = `${containerWidth}px`;
     this.velocityCanvas.style.height = `${velocityHeight}px`;
     this.velocityCtx.scale(dpr, dpr);
   }

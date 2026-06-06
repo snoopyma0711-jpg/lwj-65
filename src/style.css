@@ -156,11 +156,14 @@ body {
 }
 
 .velocity-canvas {
-  flex: 1;
+  flex: 0 0 auto;
+  height: 80px;
   display: block;
   background: #121225;
   border-top: 2px solid #0f3460;
   cursor: ns-resize;
+  position: relative;
+  z-index: 10;
 }
 
 .scroll-wrapper::-webkit-scrollbar {

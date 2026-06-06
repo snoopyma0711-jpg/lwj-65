@@ -83,6 +83,8 @@ function init(): void {
     updatePlayButton();
     render();
   });
+
+  updateStatus('就绪');
 }
 
 function resizeCanvases(): void {
@@ -107,16 +109,7 @@ function setupEventListeners(): void {
   scrollWrapper.addEventListener('scroll', () => {
     scrollX = scrollWrapper.scrollLeft;
     scrollY = scrollWrapper.scrollTop;
-    if (velocityCanvas.scrollLeft !== scrollX) {
-      velocityCanvas.scrollLeft = scrollX;
-    }
     render();
-  });
-
-  velocityCanvas.addEventListener('scroll', () => {
-    if (scrollWrapper.scrollLeft !== velocityCanvas.scrollLeft) {
-      scrollWrapper.scrollLeft = velocityCanvas.scrollLeft;
-    }
   });
 
   gridCanvas.addEventListener('mousedown', handleGridMouseDown);
@@ -318,9 +311,8 @@ function handleVelocityMouseDown(e: MouseEvent): void {
   e.preventDefault();
   synth.ensureContext();
 
-  const rect = velocityCanvas.getBoundingClientRect();
-  const x = e.clientX - rect.left + scrollX;
-  const y = e.clientY - rect.top;
+  const x = e.offsetX + scrollX;
+  const y = e.offsetY;
 
   mouseState.startX = x;
   mouseState.startY = y;
@@ -357,9 +349,8 @@ function handleVelocityMouseDown(e: MouseEvent): void {
 }
 
 function handleVelocityMouseMove(e: MouseEvent): void {
-  const rect = velocityCanvas.getBoundingClientRect();
-  const x = e.clientX - rect.left + scrollX;
-  const y = e.clientY - rect.top;
+  const x = e.offsetX + scrollX;
+  const y = e.offsetY;
 
   if (mouseState.mode === 'idle') {
     const velocityNote = findNoteAtVelocityEditor(x);
