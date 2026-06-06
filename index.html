@@ -33,12 +33,16 @@
     </header>
 
     <div class="piano-roll-container">
-      <canvas id="keysCanvas" class="keys-canvas"></canvas>
+      <div class="left-panel">
+        <canvas id="keysCanvas" class="keys-canvas"></canvas>
+        <div class="velocity-label">Velocity</div>
+      </div>
       <div class="grid-wrapper">
         <canvas id="headerCanvas" class="header-canvas"></canvas>
         <div class="scroll-wrapper">
           <canvas id="gridCanvas" class="grid-canvas"></canvas>
         </div>
+        <canvas id="velocityCanvas" class="velocity-canvas"></canvas>
       </div>
     </div>
 

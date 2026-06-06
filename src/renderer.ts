@@ -5,9 +5,11 @@ export class PianoRollRenderer {
   private keysCanvas: HTMLCanvasElement;
   private headerCanvas: HTMLCanvasElement;
   private gridCanvas: HTMLCanvasElement;
+  private velocityCanvas: HTMLCanvasElement;
   private keysCtx: CanvasRenderingContext2D;
   private headerCtx: CanvasRenderingContext2D;
   private gridCtx: CanvasRenderingContext2D;
+  private velocityCtx: CanvasRenderingContext2D;
   private config: ViewConfig;
   private devicePixelRatio: number;
 
@@ -15,25 +17,29 @@ export class PianoRollRenderer {
     keysCanvas: HTMLCanvasElement,
     headerCanvas: HTMLCanvasElement,
     gridCanvas: HTMLCanvasElement,
+    velocityCanvas: HTMLCanvasElement,
     config: ViewConfig
   ) {
     this.keysCanvas = keysCanvas;
     this.headerCanvas = headerCanvas;
     this.gridCanvas = gridCanvas;
+    this.velocityCanvas = velocityCanvas;
     this.config = config;
     this.devicePixelRatio = window.devicePixelRatio || 1;
 
     const keysCtx = keysCanvas.getContext('2d');
     const headerCtx = headerCanvas.getContext('2d');
     const gridCtx = gridCanvas.getContext('2d');
+    const velocityCtx = velocityCanvas.getContext('2d');
 
-    if (!keysCtx || !headerCtx || !gridCtx) {
+    if (!keysCtx || !headerCtx || !gridCtx || !velocityCtx) {
       throw new Error('Failed to get canvas contexts');
     }
 
     this.keysCtx = keysCtx;
     this.headerCtx = headerCtx;
     this.gridCtx = gridCtx;
+    this.velocityCtx = velocityCtx;
   }
 
   updateConfig(config: Partial<ViewConfig>): void {
@@ -46,11 +52,13 @@ export class PianoRollRenderer {
 
   resize(containerWidth: number, containerHeight: number, totalWidth: number, totalHeight: number): void {
     const dpr = this.devicePixelRatio;
+    const velocityHeight = this.config.velocityEditorHeight;
+    const visibleGridHeight = containerHeight - this.config.headerHeight - velocityHeight;
 
     this.keysCanvas.width = this.config.keysWidth * dpr;
-    this.keysCanvas.height = containerHeight * dpr;
+    this.keysCanvas.height = visibleGridHeight * dpr;
     this.keysCanvas.style.width = `${this.config.keysWidth}px`;
-    this.keysCanvas.style.height = `${containerHeight}px`;
+    this.keysCanvas.style.height = `${visibleGridHeight}px`;
     this.keysCtx.scale(dpr, dpr);
 
     this.headerCanvas.width = containerWidth * dpr;
@@ -64,6 +72,12 @@ export class PianoRollRenderer {
     this.gridCanvas.style.width = `${totalWidth}px`;
     this.gridCanvas.style.height = `${totalHeight}px`;
     this.gridCtx.scale(dpr, dpr);
+
+    this.velocityCanvas.width = totalWidth * dpr;
+    this.velocityCanvas.height = velocityHeight * dpr;
+    this.velocityCanvas.style.width = `${totalWidth}px`;
+    this.velocityCanvas.style.height = `${velocityHeight}px`;
+    this.velocityCtx.scale(dpr, dpr);
   }
 
   renderKeys(scrollY: number, hoverPitch: number | null, activePitches: Set<number>): void {
@@ -262,17 +276,39 @@ export class PianoRollRenderer {
         ctx.stroke();
         ctx.shadowBlur = 0;
       }
+
+      const barWidth = Math.max(4, width * 0.6);
+      const barX = x + width / 2 - barWidth / 2;
+      const barMaxHeight = rowHeight * 0.6;
+      const barHeight = (note.velocity / 127) * barMaxHeight;
+      const barY = y + height - barHeight + 1;
+
+      const barGradient = ctx.createLinearGradient(barX, barY, barX, y + height);
+      if (note.selected) {
+        barGradient.addColorStop(0, '#6ee7de');
+        barGradient.addColorStop(1, '#4ecdc4');
+      } else {
+        barGradient.addColorStop(0, '#ffd700');
+        barGradient.addColorStop(1, '#ffaa00');
+      }
+
+      ctx.fillStyle = barGradient;
+      ctx.fillRect(barX, barY, barWidth, barHeight);
+
+      ctx.strokeStyle = note.selected ? '#6ee7de' : '#ffd700';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(barX, barY, barWidth, barHeight);
     }
   }
 
   renderPlayhead(playheadTicks: number, scrollX: number, viewportWidth: number): void {
     const ctx = this.gridCtx;
-    const { beatWidth, ticksPerBeat } = this.config;
+    const { beatWidth, ticksPerBeat, rowHeight, totalKeys } = this.config;
     const x = (playheadTicks / ticksPerBeat) * beatWidth;
 
     if (x < scrollX - 50 || x > scrollX + viewportWidth + 50) return;
 
-    const totalHeight = this.gridCanvas.height / this.devicePixelRatio;
+    const totalHeight = totalKeys * rowHeight;
 
     ctx.fillStyle = 'rgba(255, 215, 0, 0.8)';
     ctx.fillRect(x - 1, 0, 2, totalHeight);
@@ -284,6 +320,99 @@ export class PianoRollRenderer {
     ctx.closePath();
     ctx.fillStyle = '#ffd700';
     ctx.fill();
+  }
+
+  renderVelocityEditor(notes: Note[], scrollX: number): void {
+    const ctx = this.velocityCtx;
+    const { beatWidth, ticksPerBeat, velocityEditorHeight } = this.config;
+    const width = this.velocityCanvas.width / this.devicePixelRatio;
+    const height = this.velocityCanvas.height / this.devicePixelRatio;
+    const padding = 4;
+    const barMaxHeight = height - padding * 2;
+    const barBaseY = height - padding;
+
+    ctx.clearRect(0, 0, width, height);
+
+    ctx.fillStyle = '#121225';
+    ctx.fillRect(0, 0, width, height);
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    for (let level = 1; level <= 3; level++) {
+      const y = (height * level) / 4;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(width, y);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+
+    const totalBeats = Math.ceil(width / beatWidth);
+    const startBeat = Math.floor(scrollX / beatWidth);
+    for (let beat = startBeat; beat <= startBeat + totalBeats + 1; beat++) {
+      const x = beat * beatWidth - scrollX;
+      const beatInMeasure = beat % 4;
+
+      if (beatInMeasure === 0) {
+        ctx.strokeStyle = 'rgba(233, 69, 96, 0.4)';
+        ctx.lineWidth = 2;
+      } else {
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+        ctx.lineWidth = 1;
+      }
+
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, height);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText('127', 4, 2);
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('1', 4, height - 2);
+
+    for (const note of notes) {
+      const noteX = (note.start / ticksPerBeat) * beatWidth - scrollX;
+      const noteW = (note.duration / ticksPerBeat) * beatWidth;
+
+      const barWidth = Math.max(4, noteW * 0.7);
+      const barX = noteX + noteW / 2 - barWidth / 2;
+      const barHeight = (note.velocity / 127) * barMaxHeight;
+      const barY = barBaseY - barHeight;
+
+      if (barX + barWidth < 0 || barX > width) continue;
+
+      const barGradient = ctx.createLinearGradient(barX, barY, barX, barBaseY);
+      if (note.selected) {
+        barGradient.addColorStop(0, '#6ee7de');
+        barGradient.addColorStop(1, '#4ecdc4');
+      } else {
+        barGradient.addColorStop(0, '#707070');
+        barGradient.addColorStop(1, '#505050');
+      }
+
+      ctx.fillStyle = barGradient;
+      ctx.fillRect(barX, barY, barWidth, barHeight);
+
+      ctx.strokeStyle = note.selected ? '#6ee7de' : '#808080';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(barX, barY, barWidth, barHeight);
+    }
+  }
+
+  renderVelocityPlayhead(playheadTicks: number, scrollX: number): void {
+    const ctx = this.velocityCtx;
+    const { beatWidth, ticksPerBeat, velocityEditorHeight } = this.config;
+    const x = (playheadTicks / ticksPerBeat) * beatWidth - scrollX;
+    const height = this.velocityCanvas.height / this.devicePixelRatio;
+
+    ctx.fillStyle = 'rgba(255, 215, 0, 0.8)';
+    ctx.fillRect(x - 1, 0, 2, height);
   }
 
   renderSelectionBox(
@@ -340,5 +469,7 @@ export class PianoRollRenderer {
     this.renderSelectionBox(selectionBox, scrollX, scrollY);
     this.renderKeys(scrollY, hoverPitch, activePitches);
     this.renderHeader(scrollX, bpm, beatsPerMeasure);
+    this.renderVelocityEditor(notes, scrollX);
+    this.renderVelocityPlayhead(playheadTicks, scrollX);
   }
 }

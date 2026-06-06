@@ -21,6 +21,7 @@ const viewConfig: ViewConfig = {
   maxPitch: 84,
   totalKeys: 49,
   resizeHandleWidth: 8,
+  velocityEditorHeight: 80,
 };
 
 let notes: Note[] = [];
@@ -45,6 +46,7 @@ const mouseState: MouseState = {
 let keysCanvas: HTMLCanvasElement;
 let headerCanvas: HTMLCanvasElement;
 let gridCanvas: HTMLCanvasElement;
+let velocityCanvas: HTMLCanvasElement;
 let scrollWrapper: HTMLDivElement;
 let statusText: HTMLElement;
 let selectionInfo: HTMLElement;
@@ -53,11 +55,20 @@ function init(): void {
   keysCanvas = document.getElementById('keysCanvas') as HTMLCanvasElement;
   headerCanvas = document.getElementById('headerCanvas') as HTMLCanvasElement;
   gridCanvas = document.getElementById('gridCanvas') as HTMLCanvasElement;
+  velocityCanvas = document.getElementById('velocityCanvas') as HTMLCanvasElement;
   scrollWrapper = document.querySelector('.scroll-wrapper') as HTMLDivElement;
   statusText = document.getElementById('statusText') as HTMLElement;
   selectionInfo = document.getElementById('selectionInfo') as HTMLElement;
 
-  renderer = new PianoRollRenderer(keysCanvas, headerCanvas, gridCanvas, viewConfig);
+  renderer = new PianoRollRenderer(keysCanvas, headerCanvas, gridCanvas, velocityCanvas, viewConfig);
+
+  notes = [
+    { id: generateId(), pitch: 60, start: 0, duration: TICKS_PER_BEAT, velocity: 80, selected: false },
+    { id: generateId(), pitch: 62, start: TICKS_PER_BEAT, duration: TICKS_PER_BEAT, velocity: 100, selected: false },
+    { id: generateId(), pitch: 64, start: TICKS_PER_BEAT * 2, duration: TICKS_PER_BEAT, velocity: 60, selected: false },
+    { id: generateId(), pitch: 65, start: TICKS_PER_BEAT * 3, duration: TICKS_PER_BEAT, velocity: 120, selected: false },
+    { id: generateId(), pitch: 67, start: TICKS_PER_BEAT * 4, duration: TICKS_PER_BEAT * 2, velocity: 90, selected: false },
+  ];
 
   setupEventListeners();
   resizeCanvases();
@@ -82,9 +93,9 @@ function resizeCanvases(): void {
   const containerHeight = container.clientHeight - viewConfig.headerHeight;
 
   const totalWidth = viewConfig.beatWidth * BEATS_PER_MEASURE * TOTAL_MEASURES;
-  const totalHeight = viewConfig.rowHeight * viewConfig.totalKeys;
+  const pianoRollHeight = viewConfig.rowHeight * viewConfig.totalKeys;
 
-  renderer.resize(containerWidth, containerHeight + viewConfig.headerHeight, totalWidth, totalHeight);
+  renderer.resize(containerWidth, containerHeight + viewConfig.headerHeight, totalWidth, pianoRollHeight);
 }
 
 function setupEventListeners(): void {
@@ -96,12 +107,26 @@ function setupEventListeners(): void {
   scrollWrapper.addEventListener('scroll', () => {
     scrollX = scrollWrapper.scrollLeft;
     scrollY = scrollWrapper.scrollTop;
+    if (velocityCanvas.scrollLeft !== scrollX) {
+      velocityCanvas.scrollLeft = scrollX;
+    }
     render();
+  });
+
+  velocityCanvas.addEventListener('scroll', () => {
+    if (scrollWrapper.scrollLeft !== velocityCanvas.scrollLeft) {
+      scrollWrapper.scrollLeft = velocityCanvas.scrollLeft;
+    }
   });
 
   gridCanvas.addEventListener('mousedown', handleGridMouseDown);
   gridCanvas.addEventListener('mousemove', handleGridMouseMove);
   gridCanvas.addEventListener('mouseleave', handleGridMouseLeave);
+
+  velocityCanvas.addEventListener('mousedown', handleVelocityMouseDown);
+  velocityCanvas.addEventListener('mousemove', handleVelocityMouseMove);
+  velocityCanvas.addEventListener('mouseleave', handleVelocityMouseLeave);
+
   window.addEventListener('mouseup', handleMouseUp);
 
   keysCanvas.addEventListener('mousedown', handleKeysMouseDown);
@@ -289,6 +314,87 @@ function handleGridMouseLeave(): void {
   gridCanvas.style.cursor = 'crosshair';
 }
 
+function handleVelocityMouseDown(e: MouseEvent): void {
+  e.preventDefault();
+  synth.ensureContext();
+
+  const rect = velocityCanvas.getBoundingClientRect();
+  const x = e.clientX - rect.left + scrollX;
+  const y = e.clientY - rect.top;
+
+  mouseState.startX = x;
+  mouseState.startY = y;
+  mouseState.startScrollX = scrollX;
+  mouseState.startScrollY = scrollY;
+  mouseState.originalNotes = JSON.parse(JSON.stringify(notes));
+
+  if (e.button === 0) {
+    const velocityNote = findNoteAtVelocityEditor(x);
+    if (velocityNote) {
+      if (!e.shiftKey && !velocityNote.selected) {
+        clearSelection();
+        velocityNote.selected = true;
+      } else if (e.shiftKey) {
+        velocityNote.selected = !velocityNote.selected;
+      }
+      mouseState.mode = 'editingVelocity';
+      mouseState.targetNoteId = velocityNote.id;
+      const editorHeight = velocityCanvas.clientHeight;
+      const newVelocity = calculateVelocityFromVelocityY(y, editorHeight);
+      const selectedNotes = notes.filter(n => n.selected);
+      for (const note of selectedNotes) {
+        note.velocity = newVelocity;
+      }
+      player.setNotes(notes);
+      updateStatus(`力度: ${newVelocity}`);
+    }
+  } else if (e.button === 2) {
+    mouseState.mode = 'panning';
+  }
+
+  updateUI();
+  render();
+}
+
+function handleVelocityMouseMove(e: MouseEvent): void {
+  const rect = velocityCanvas.getBoundingClientRect();
+  const x = e.clientX - rect.left + scrollX;
+  const y = e.clientY - rect.top;
+
+  if (mouseState.mode === 'idle') {
+    const velocityNote = findNoteAtVelocityEditor(x);
+    if (velocityNote) {
+      velocityCanvas.style.cursor = 'ns-resize';
+    } else {
+      velocityCanvas.style.cursor = 'default';
+    }
+    return;
+  }
+
+  if (mouseState.mode === 'panning') {
+    const dx = mouseState.startX - x + scrollX - mouseState.startScrollX;
+    scrollWrapper.scrollLeft = mouseState.startScrollX + dx;
+    return;
+  }
+
+  if (mouseState.mode === 'editingVelocity') {
+    const editorHeight = velocityCanvas.clientHeight;
+    const newVelocity = calculateVelocityFromVelocityY(y, editorHeight);
+    const selectedNotes = notes.filter(n => n.selected);
+    for (const note of selectedNotes) {
+      note.velocity = newVelocity;
+    }
+    player.setNotes(notes);
+    updateStatus(`力度: ${newVelocity}`);
+    render();
+    return;
+  }
+}
+
+function handleVelocityMouseLeave(): void {
+  velocityCanvas.style.cursor = 'ns-resize';
+}
+
 function handleMouseUp(): void {
   if (mouseState.mode !== 'idle' && mouseState.mode !== 'panning' && mouseState.mode !== 'selecting') {
     history.pushState(mouseState.originalNotes);
@@ -298,6 +404,10 @@ function handleMouseUp(): void {
     if (mouseState.originalNotes.length > 0 || notes.some(n => n.selected)) {
       history.pushState(mouseState.originalNotes);
     }
+  }
+
+  if (mouseState.mode === 'editingVelocity') {
+    updateStatus('力度编辑完成');
   }
 
   mouseState.mode = 'idle';
@@ -400,6 +510,31 @@ function findNoteAtPosition(x: number, y: number): Note | null {
     }
   }
   return null;
+}
+
+function findNoteAtVelocityEditor(x: number): Note | null {
+  for (let i = notes.length - 1; i >= 0; i--) {
+    const note = notes[i];
+    const noteX = (note.start / TICKS_PER_BEAT) * viewConfig.beatWidth;
+    const noteW = (note.duration / TICKS_PER_BEAT) * viewConfig.beatWidth;
+    const barWidth = Math.max(4, noteW * 0.7);
+    const barX = noteX + noteW / 2 - barWidth / 2;
+
+    if (x >= barX - 2 && x < barX + barWidth + 2) {
+      return note;
+    }
+  }
+  return null;
+}
+
+function calculateVelocityFromVelocityY(y: number, editorHeight: number): number {
+  const padding = 4;
+  const barTop = padding;
+  const barBottom = editorHeight - padding;
+
+  const clampedY = Math.max(barTop, Math.min(barBottom, y));
+  const velocity = Math.round(127 - ((clampedY - barTop) / (barBottom - barTop)) * 126);
+  return Math.max(1, Math.min(127, velocity));
 }
 
 function isOnResizeHandle(note: Note, x: number): boolean {

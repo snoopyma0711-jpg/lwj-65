@@ -26,6 +26,7 @@ export interface ViewConfig {
   maxPitch: number;
   totalKeys: number;
   resizeHandleWidth: number;
+  velocityEditorHeight: number;
 }
 
 export type MouseMode =
@@ -34,7 +35,8 @@ export type MouseMode =
   | 'moving'
   | 'resizing'
   | 'selecting'
-  | 'panning';
+  | 'panning'
+  | 'editingVelocity';
 
 export interface MouseState {
   mode: MouseMode;
