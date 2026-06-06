@@ -1,4 +1,4 @@
-import type { Note, ViewConfig, MouseState, Chord } from './types';
+import type { Note, ViewConfig, MouseState, Chord, GridSubdivision, RhythmPattern } from './types';
 import { generateId, pitchToName, isBlackKey } from './types';
 import { PianoRollRenderer } from './renderer';
 import { ChordDetector } from './chordDetector';
@@ -35,6 +35,64 @@ let activePitches: Set<number> = new Set();
 let renderer: PianoRollRenderer | null = null;
 let chordDetector: ChordDetector | null = null;
 let chords: Chord[] = [];
+let gridSubdivision: GridSubdivision = 4;
+
+const rhythmPatterns: RhythmPattern[] = [
+  {
+    name: '四分音符均分',
+    description: '每拍一个四分音符',
+    pattern: [
+      { start: 0, duration: 1 },
+      { start: 1, duration: 1 },
+      { start: 2, duration: 1 },
+      { start: 3, duration: 1 },
+    ],
+  },
+  {
+    name: '八分音符律动',
+    description: '每拍两个八分音符',
+    pattern: [
+      { start: 0, duration: 0.5 },
+      { start: 0.5, duration: 0.5 },
+      { start: 1, duration: 0.5 },
+      { start: 1.5, duration: 0.5 },
+      { start: 2, duration: 0.5 },
+      { start: 2.5, duration: 0.5 },
+      { start: 3, duration: 0.5 },
+      { start: 3.5, duration: 0.5 },
+    ],
+  },
+  {
+    name: '切分节奏',
+    description: '经典切分音型',
+    pattern: [
+      { start: 0, duration: 0.5 },
+      { start: 0.5, duration: 1 },
+      { start: 1.5, duration: 0.5 },
+      { start: 2, duration: 0.5 },
+      { start: 2.5, duration: 1 },
+      { start: 3.5, duration: 0.5 },
+    ],
+  },
+  {
+    name: '三连音',
+    description: '每拍三个八分三连音',
+    pattern: [
+      { start: 0, duration: 1 / 3 },
+      { start: 1 / 3, duration: 1 / 3 },
+      { start: 2 / 3, duration: 1 / 3 },
+      { start: 1, duration: 1 / 3 },
+      { start: 1 + 1 / 3, duration: 1 / 3 },
+      { start: 1 + 2 / 3, duration: 1 / 3 },
+      { start: 2, duration: 1 / 3 },
+      { start: 2 + 1 / 3, duration: 1 / 3 },
+      { start: 2 + 2 / 3, duration: 1 / 3 },
+      { start: 3, duration: 1 / 3 },
+      { start: 3 + 1 / 3, duration: 1 / 3 },
+      { start: 3 + 2 / 3, duration: 1 / 3 },
+    ],
+  },
+];
 
 const mouseState: MouseState = {
   mode: 'idle',
@@ -168,6 +226,23 @@ function setupEventListeners(): void {
   document.getElementById('exportBtn')?.addEventListener('click', exportMidi);
   document.getElementById('clearBtn')?.addEventListener('click', clearAll);
   document.getElementById('importMidi')?.addEventListener('change', handleImportMidi);
+  document.getElementById('quantizeBtn')?.addEventListener('click', quantizeNotes);
+
+  const gridSubdivisionSelect = document.getElementById('gridSubdivisionSelect') as HTMLSelectElement;
+  gridSubdivisionSelect.addEventListener('change', (e) => {
+    const value = parseInt((e.target as HTMLSelectElement).value);
+    gridSubdivision = value as GridSubdivision;
+    updateStatus(`网格精度: 1/${gridSubdivision}`);
+  });
+
+  const rhythmPatternSelect = document.getElementById('rhythmPatternSelect') as HTMLSelectElement;
+  rhythmPatternSelect.addEventListener('change', (e) => {
+    const value = parseInt((e.target as HTMLSelectElement).value);
+    if (value >= 0) {
+      applyRhythmPattern(value);
+    }
+    rhythmPatternSelect.value = '-1';
+  });
 
   const bpmSlider = document.getElementById('bpmSlider') as HTMLInputElement;
   const bpmValue = document.getElementById('bpmValue') as HTMLElement;
@@ -567,11 +642,153 @@ function isOnResizeHandle(note: Note, x: number): boolean {
   return x >= noteX + noteW - viewConfig.resizeHandleWidth * 2;
 }
 
+function getGridSize(): number {
+  return TICKS_PER_BEAT / gridSubdivision;
+}
+
 function snapToGrid(x: number): number {
   const tickWidth = viewConfig.beatWidth / TICKS_PER_BEAT;
-  const gridSize = TICKS_PER_BEAT / 4;
+  const gridSize = getGridSize();
   const ticks = Math.round(x / tickWidth);
   return Math.round(ticks / gridSize) * gridSize;
+}
+
+function snapTicksToGrid(ticks: number): number {
+  const gridSize = getGridSize();
+  return Math.round(ticks / gridSize) * gridSize;
+}
+
+function quantizeNotes(): void {
+  const selectedNotes = notes.filter(n => n.selected);
+  if (selectedNotes.length === 0) {
+    updateStatus('请先选择要量化的音符');
+    return;
+  }
+
+  history.pushState(notes);
+
+  const gridSize = getGridSize();
+  for (const note of selectedNotes) {
+    const newStart = snapTicksToGrid(note.start);
+    const newEnd = snapTicksToGrid(note.start + note.duration);
+    note.start = Math.max(0, newStart);
+    note.duration = Math.max(gridSize, newEnd - newStart);
+  }
+
+  player.setNotes(notes);
+  updateChords();
+  updateStatus(`已量化 ${selectedNotes.length} 个音符 (1/${gridSubdivision} 精度)`);
+  updateUI();
+  render();
+}
+
+function getSelectedTimeRange(): { start: number; end: number } | null {
+  const selectedNotes = notes.filter(n => n.selected);
+  if (selectedNotes.length === 0) {
+    return null;
+  }
+
+  let minStart = Infinity;
+  let maxEnd = 0;
+  for (const note of selectedNotes) {
+    minStart = Math.min(minStart, note.start);
+    maxEnd = Math.max(maxEnd, note.start + note.duration);
+  }
+
+  return { start: minStart, end: maxEnd };
+}
+
+function getMostFrequentPitch(selectedNotes: Note[]): number {
+  const pitchCount = new Map<number, number>();
+  for (const note of selectedNotes) {
+    pitchCount.set(note.pitch, (pitchCount.get(note.pitch) || 0) + 1);
+  }
+
+  let maxCount = 0;
+  let mostFrequent = 60;
+  for (const [pitch, count] of pitchCount) {
+    if (count > maxCount) {
+      maxCount = count;
+      mostFrequent = pitch;
+    }
+  }
+  return mostFrequent;
+}
+
+function applyRhythmPattern(patternIndex: number): void {
+  if (patternIndex < 0 || patternIndex >= rhythmPatterns.length) {
+    return;
+  }
+
+  const pattern = rhythmPatterns[patternIndex];
+  const selectedNotes = notes.filter(n => n.selected);
+  const timeRange = getSelectedTimeRange();
+
+  if (!timeRange) {
+    updateStatus('请先选择时间范围（选择该区域内的音符）');
+    return;
+  }
+
+  history.pushState(notes);
+
+  const pitch = selectedNotes.length > 0 ? getMostFrequentPitch(selectedNotes) : 60;
+  const rangeStart = timeRange.start;
+  const rangeEnd = timeRange.end;
+  const rangeDuration = rangeEnd - rangeStart;
+  const beatsInRange = rangeDuration / TICKS_PER_BEAT;
+
+  const patternTotalBeats = 4;
+  const repetitions = Math.max(1, Math.floor(beatsInRange / patternTotalBeats));
+  const remainingBeats = beatsInRange - repetitions * patternTotalBeats;
+
+  notes = notes.filter(n => {
+    const noteEnd = n.start + n.duration;
+    return !(n.start >= rangeStart && noteEnd <= rangeEnd);
+  });
+
+  for (let rep = 0; rep < repetitions; rep++) {
+    for (const event of pattern.pattern) {
+      const start = rangeStart + (rep * patternTotalBeats + event.start) * TICKS_PER_BEAT;
+      const duration = event.duration * TICKS_PER_BEAT;
+
+      if (start + duration <= rangeEnd) {
+        notes.push({
+          id: generateId(),
+          pitch,
+          start: snapTicksToGrid(start),
+          duration: snapTicksToGrid(duration),
+          velocity: 100,
+          selected: true,
+        });
+      }
+    }
+  }
+
+  if (remainingBeats > 0) {
+    for (const event of pattern.pattern) {
+      if (event.start < remainingBeats) {
+        const start = rangeStart + (repetitions * patternTotalBeats + event.start) * TICKS_PER_BEAT;
+        const duration = Math.min(event.duration, remainingBeats - event.start) * TICKS_PER_BEAT;
+
+        if (start + duration <= rangeEnd) {
+          notes.push({
+            id: generateId(),
+            pitch,
+            start: snapTicksToGrid(start),
+            duration: snapTicksToGrid(duration),
+            velocity: 100,
+            selected: true,
+          });
+        }
+      }
+    }
+  }
+
+  player.setNotes(notes);
+  updateChords();
+  updateStatus(`已应用节奏模板: ${pattern.name} (${pitchToName(pitch)})`);
+  updateUI();
+  render();
 }
 
 function createNoteAtPosition(x: number, y: number): void {

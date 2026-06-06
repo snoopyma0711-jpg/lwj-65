@@ -36,6 +36,47 @@ body {
   gap: 8px;
 }
 
+.divider {
+  width: 1px;
+  height: 24px;
+  background: #0f3460;
+  margin: 0 4px;
+}
+
+.toolbar-select-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: #a0a0a0;
+}
+
+.toolbar-select {
+  padding: 6px 10px;
+  border: 1px solid #0f3460;
+  border-radius: 6px;
+  background: #16213e;
+  color: #e0e0e0;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+  outline: none;
+}
+
+.toolbar-select:hover {
+  background: #1a5276;
+  border-color: #1a5276;
+}
+
+.toolbar-select:focus {
+  border-color: #e94560;
+}
+
+.toolbar-select option {
+  background: #16213e;
+  color: #e0e0e0;
+}
+
 .btn {
   padding: 8px 16px;
   border: none;

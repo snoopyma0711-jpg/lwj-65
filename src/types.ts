@@ -63,6 +63,14 @@ export interface Chord {
 
 export type ChordType = 'major' | 'minor' | 'dominant7' | 'minor7' | 'unknown';
 
+export type GridSubdivision = 1 | 2 | 4 | 8 | 16 | 32;
+
+export interface RhythmPattern {
+  name: string;
+  description: string;
+  pattern: { start: number; duration: number }[];
+}
+
 export const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 
 export const BLACK_KEYS = new Set([1, 3, 6, 8, 10]);

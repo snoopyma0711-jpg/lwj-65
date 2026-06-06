@@ -14,6 +14,19 @@
         <button id="stopBtn" class="btn">■ 停止</button>
         <button id="undoBtn" class="btn">↶ 撤销</button>
         <button id="redoBtn" class="btn">↷ 重做</button>
+        <div class="divider"></div>
+        <label class="toolbar-select-label">
+          网格:
+          <select id="gridSubdivisionSelect" class="toolbar-select">
+            <option value="1">1/1</option>
+            <option value="2">1/2</option>
+            <option value="4" selected>1/4</option>
+            <option value="8">1/8</option>
+            <option value="16">1/16</option>
+            <option value="32">1/32</option>
+          </select>
+        </label>
+        <button id="quantizeBtn" class="btn">📏 量化</button>
       </div>
       <div class="toolbar-center">
         <label class="bpm-control">
@@ -23,6 +36,16 @@
         </label>
       </div>
       <div class="toolbar-right">
+        <label class="toolbar-select-label">
+          节奏模板:
+          <select id="rhythmPatternSelect" class="toolbar-select">
+            <option value="-1">-- 选择模板 --</option>
+            <option value="0">四分音符均分</option>
+            <option value="1">八分音符律动</option>
+            <option value="2">切分节奏</option>
+            <option value="3">三连音</option>
+          </select>
+        </label>
         <label class="btn file-label">
           📂 导入MIDI
           <input type="file" id="importMidi" accept=".mid,.midi" hidden>
