@@ -95,6 +95,20 @@ export interface Chord {
   noteIds: string[];
 }
 
+export interface Segment {
+  id: string;
+  name: string;
+  startTick: number;
+  endTick: number;
+  color: string;
+}
+
+export interface ArrangementItem {
+  id: string;
+  segmentId: string;
+  startTick: number;
+}
+
 export type ChordType = 'major' | 'minor' | 'dominant7' | 'minor7' | 'unknown';
 
 export type GridSubdivision = 1 | 2 | 4 | 8 | 16 | 32;

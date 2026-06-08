@@ -1,5 +1,5 @@
-import type { Note, ViewConfig, MouseState, Chord, GridSubdivision, RhythmPattern, ScaleType, Track, WaveformType } from './types';
-import { generateId, pitchToName, isBlackKey, SCALES, snapToScale, analyzeIntervals, isInScale, DEFAULT_TRACKS, WAVEFORM_NAMES } from './types';
+import type { Note, ViewConfig, MouseState, Chord, GridSubdivision, RhythmPattern, ScaleType, Track, WaveformType, Segment, ArrangementItem } from './types';
+import { generateId, pitchToName, isBlackKey, SCALES, snapToScale, analyzeIntervals, isInScale, DEFAULT_TRACKS, WAVEFORM_NAMES, TRACK_COLORS } from './types';
 import { PianoRollRenderer } from './renderer';
 import { ChordDetector } from './chordDetector';
 import { player } from './player';
@@ -42,6 +42,26 @@ let intervalPanelContent: HTMLElement;
 let tracks: Track[] = JSON.parse(JSON.stringify(DEFAULT_TRACKS));
 let currentTrackId: number = 0;
 let trackList: HTMLElement;
+
+let segments: Segment[] = [];
+let arrangement: ArrangementItem[] = [];
+let segmentList: HTMLElement | null = null;
+let arrangementTimeline: HTMLElement | null = null;
+let arrangementTimelineContent: HTMLElement | null = null;
+let draggedSegment: Segment | null = null;
+let draggedArrangementItem: ArrangementItem | null = null;
+let dragInsertIndex: number = -1;
+
+const SEGMENT_COLORS = [
+  '#ffd93d',
+  '#4ecdc4',
+  '#e94560',
+  '#6c5ce7',
+  '#a29bfe',
+  '#00b894',
+  '#fd79a8',
+  '#fdcb6e',
+];
 
 const rhythmPatterns: RhythmPattern[] = [
   {
@@ -131,6 +151,9 @@ function init(): void {
   selectionInfo = document.getElementById('selectionInfo') as HTMLElement;
   intervalPanelContent = document.getElementById('intervalPanelContent') as HTMLElement;
   trackList = document.getElementById('trackList') as HTMLElement;
+  segmentList = document.getElementById('segmentList') as HTMLElement | null;
+  arrangementTimeline = document.getElementById('arrangementTimeline') as HTMLElement | null;
+  arrangementTimelineContent = document.getElementById('arrangementTimelineContent') as HTMLElement | null;
 
   renderer = new PianoRollRenderer(keysCanvas, headerCanvas, chordBarCanvas, gridCanvas, velocityCanvas, viewConfig);
   chordDetector = new ChordDetector(TICKS_PER_BEAT);
@@ -944,11 +967,13 @@ async function startPlayback(): Promise<void> {
   updatePlayButton();
   updateStatus('正在启动...');
 
+  const playNotes = getArrangementNotes();
+  player.setNotes(playNotes);
   player.setBpm(bpm);
   try {
     await player.play();
     updatePlayButton();
-    updateStatus('播放中...');
+    updateStatus(arrangement.length > 0 ? '播放中... (排列视图)' : '播放中...');
   } catch (e) {
     updatePlayButton();
     updateStatus('播放启动失败: ' + (e as Error).message);
@@ -1181,6 +1206,377 @@ function updateUI(): void {
   updateIntervalPanel();
 }
 
+function saveSelectedAsSegment(): void {
+  const timeRange = getSelectedTimeRange();
+  if (!timeRange) {
+    updateStatus('请先框选时间区域（按住Shift拖动选择）');
+    return;
+  }
+
+  const name = prompt('请输入片段名称:', `片段 ${segments.length + 1}`);
+  if (!name || name.trim() === '') {
+    return;
+  }
+
+  const segment: Segment = {
+    id: generateId(),
+    name: name.trim(),
+    startTick: snapTicksToGrid(timeRange.start),
+    endTick: snapTicksToGrid(timeRange.end),
+    color: SEGMENT_COLORS[segments.length % SEGMENT_COLORS.length],
+  };
+
+  segments.push(segment);
+  player.setSegments(segments, arrangement);
+  renderSegmentList();
+  render();
+  updateStatus(`已保存片段: ${name}`);
+}
+
+function formatDuration(ticks: number): string {
+  const beats = ticks / TICKS_PER_BEAT;
+  const measures = Math.floor(beats / BEATS_PER_MEASURE);
+  const remainingBeats = beats % BEATS_PER_MEASURE;
+  
+  if (measures > 0 && remainingBeats > 0) {
+    return `${measures}小节 ${remainingBeats}拍`;
+  } else if (measures > 0) {
+    return `${measures}小节`;
+  } else {
+    return `${remainingBeats}拍`;
+  }
+}
+
+function renderSegmentList(): void {
+  if (!segmentList) return;
+
+  if (segments.length === 0) {
+    segmentList.innerHTML = `
+      <div class="segment-empty">暂无片段<br>选择时间区域后点击"保存片段"</div>
+    `;
+    return;
+  }
+
+  segmentList.innerHTML = '';
+
+  for (const segment of segments) {
+    const duration = segment.endTick - segment.startTick;
+    const segmentItem = document.createElement('div');
+    segmentItem.className = 'segment-item';
+    segmentItem.draggable = true;
+    segmentItem.dataset.segmentId = segment.id;
+
+    segmentItem.innerHTML = `
+      <div class="segment-color" style="background-color: ${segment.color}; color: ${segment.color};"></div>
+      <div class="segment-info">
+        <div class="segment-name">${segment.name}</div>
+        <div class="segment-duration">${formatDuration(duration)}</div>
+      </div>
+      <button class="segment-delete" data-action="delete-segment" data-segment-id="${segment.id}" title="删除片段">×</button>
+    `;
+
+    segmentItem.addEventListener('dragstart', (e) => {
+      draggedSegment = segment;
+      segmentItem.classList.add('dragging');
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'copy';
+        e.dataTransfer.setData('text/plain', segment.id);
+      }
+    });
+
+    segmentItem.addEventListener('dragend', () => {
+      draggedSegment = null;
+      segmentItem.classList.remove('dragging');
+    });
+
+    segmentItem.addEventListener('dblclick', (e) => {
+      if ((e.target as HTMLElement).closest('[data-action="delete-segment"]')) return;
+      jumpToSegment(segment);
+    });
+
+    segmentItem.querySelector('[data-action="delete-segment"]')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (confirm(`确定要删除片段"${segment.name}"吗？这将同时移除排列视图中所有引用该片段的项。`)) {
+        deleteSegment(segment.id);
+      }
+    });
+
+    segmentList.appendChild(segmentItem);
+  }
+}
+
+function deleteSegment(segmentId: string): void {
+  const segment = segments.find(s => s.id === segmentId);
+  if (!segment) return;
+
+  segments = segments.filter(s => s.id !== segmentId);
+  arrangement = arrangement.filter(a => a.segmentId !== segmentId);
+  player.setSegments(segments, arrangement);
+  renderSegmentList();
+  renderArrangement();
+  render();
+  updateStatus(`已删除片段: ${segment.name}`);
+}
+
+function jumpToSegment(segment: Segment): void {
+  const startX = (segment.startTick / TICKS_PER_BEAT) * viewConfig.beatWidth;
+  scrollWrapper.scrollLeft = Math.max(0, startX - 100);
+  clearSelection();
+  
+  for (const note of notes) {
+    if (note.start >= segment.startTick && note.start + note.duration <= segment.endTick) {
+      note.selected = true;
+    }
+  }
+  
+  updateUI();
+  render();
+  updateStatus(`跳转到片段: ${segment.name}`);
+}
+
+function getArrangementNotes(): Note[] {
+  if (arrangement.length === 0) {
+    return notes;
+  }
+
+  const arrangedNotes: Note[] = [];
+  let currentOffset = 0;
+
+  for (const item of arrangement) {
+    const segment = segments.find(s => s.id === item.segmentId);
+    if (!segment) continue;
+
+    const segmentDuration = segment.endTick - segment.startTick;
+    const segmentNotes = notes.filter(n => 
+      n.start >= segment.startTick && n.start + n.duration <= segment.endTick
+    );
+
+    for (const note of segmentNotes) {
+      arrangedNotes.push({
+        ...note,
+        id: generateId(),
+        start: note.start - segment.startTick + currentOffset,
+      });
+    }
+
+    currentOffset += segmentDuration;
+  }
+
+  return arrangedNotes;
+}
+
+function getArrangementTotalTicks(): number {
+  if (arrangement.length === 0) {
+    return Math.max(...notes.map(n => n.start + n.duration), 0) + TICKS_PER_BEAT * 4;
+  }
+
+  let total = 0;
+  for (const item of arrangement) {
+    const segment = segments.find(s => s.id === item.segmentId);
+    if (segment) {
+      total += segment.endTick - segment.startTick;
+    }
+  }
+  return total + TICKS_PER_BEAT * 4;
+}
+
+function renderArrangement(): void {
+  if (!arrangementTimelineContent) return;
+
+  arrangementTimelineContent.innerHTML = '';
+
+  if (arrangement.length === 0) {
+    arrangementTimelineContent.innerHTML = `
+      <div class="arrangement-empty">
+        拖拽左侧片段到此处<br>进行编排
+      </div>
+    `;
+    return;
+  }
+
+  for (let i = 0; i < arrangement.length; i++) {
+    const item = arrangement[i];
+    const segment = segments.find(s => s.id === item.segmentId);
+    if (!segment) continue;
+
+    const duration = segment.endTick - segment.startTick;
+    const width = Math.max(80, (duration / TICKS_PER_BEAT) * viewConfig.beatWidth * 0.5);
+
+    const itemEl = document.createElement('div');
+    itemEl.className = 'arrangement-item';
+    itemEl.draggable = true;
+    itemEl.dataset.arrangementId = item.id;
+    itemEl.dataset.index = i.toString();
+    itemEl.style.width = `${width}px`;
+    itemEl.style.borderColor = segment.color;
+    itemEl.style.background = `linear-gradient(135deg, ${segment.color}33, ${segment.color}11)`;
+
+    itemEl.innerHTML = `
+      <div class="arrangement-item-name" style="color: ${segment.color};">${segment.name}</div>
+      <div class="arrangement-item-duration">${formatDuration(duration)}</div>
+      <button class="arrangement-item-delete" data-action="delete-arrangement" data-arrangement-id="${item.id}" title="删除">×</button>
+    `;
+
+    itemEl.addEventListener('dragstart', (e) => {
+      draggedArrangementItem = item;
+      itemEl.classList.add('dragging');
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', item.id);
+      }
+    });
+
+    itemEl.addEventListener('dragend', () => {
+      draggedArrangementItem = null;
+      itemEl.classList.remove('dragging');
+      hideDropIndicator();
+    });
+
+    itemEl.addEventListener('dblclick', (e) => {
+      if ((e.target as HTMLElement).closest('[data-action="delete-arrangement"]')) return;
+      jumpToSegment(segment);
+    });
+
+    itemEl.querySelector('[data-action="delete-arrangement"]')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteArrangementItem(item.id);
+    });
+
+    arrangementTimelineContent.appendChild(itemEl);
+  }
+}
+
+function deleteArrangementItem(arrangementId: string): void {
+  arrangement = arrangement.filter(a => a.id !== arrangementId);
+  player.setSegments(segments, arrangement);
+  renderArrangement();
+  updateStatus('已从排列中移除');
+}
+
+function showDropIndicator(x: number): void {
+  hideDropIndicator();
+  
+  const contentRect = arrangementTimelineContent!.getBoundingClientRect();
+  const scrollLeft = arrangementTimeline!.scrollLeft;
+  const relativeX = x - contentRect.left + scrollLeft;
+  
+  const items = arrangementTimelineContent!.querySelectorAll('.arrangement-item');
+  let insertIndex = 0;
+  
+  for (let i = 0; i < items.length; i++) {
+    const itemRect = items[i].getBoundingClientRect();
+    const itemLeft = itemRect.left - contentRect.left + scrollLeft;
+    const itemCenter = itemLeft + itemRect.width / 2;
+    
+    if (relativeX < itemCenter) {
+      insertIndex = i;
+      break;
+    }
+    insertIndex = i + 1;
+  }
+  
+  dragInsertIndex = insertIndex;
+  
+  const indicator = document.createElement('div');
+  indicator.className = 'arrangement-drop-indicator';
+  indicator.id = 'dropIndicator';
+  
+  if (items.length === 0) {
+    indicator.style.left = '16px';
+  } else if (insertIndex === 0) {
+    const firstItem = items[0];
+    const firstRect = firstItem.getBoundingClientRect();
+    const left = firstRect.left - contentRect.left + scrollLeft - 6;
+    indicator.style.left = `${left}px`;
+  } else if (insertIndex >= items.length) {
+    const lastItem = items[items.length - 1];
+    const lastRect = lastItem.getBoundingClientRect();
+    const left = lastRect.right - contentRect.left + scrollLeft + 2;
+    indicator.style.left = `${left}px`;
+  } else {
+    const prevItem = items[insertIndex - 1];
+    const nextItem = items[insertIndex];
+    const prevRect = prevItem.getBoundingClientRect();
+    const nextRect = nextItem.getBoundingClientRect();
+    const left = (prevRect.right + nextRect.left) / 2 - contentRect.left + scrollLeft - 1;
+    indicator.style.left = `${left}px`;
+  }
+  
+  arrangementTimelineContent!.appendChild(indicator);
+}
+
+function hideDropIndicator(): void {
+  const indicator = document.getElementById('dropIndicator');
+  if (indicator) {
+    indicator.remove();
+  }
+  dragInsertIndex = -1;
+}
+
+function setupArrangementEventListeners(): void {
+  if (!arrangementTimeline || !arrangementTimelineContent) return;
+
+  const timeline = arrangementTimeline;
+
+  timeline.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = draggedArrangementItem ? 'move' : 'copy';
+    }
+    timeline.classList.add('drag-over');
+    showDropIndicator(e.clientX);
+  });
+
+  timeline.addEventListener('dragleave', (e) => {
+    const rect = timeline.getBoundingClientRect();
+    if (e.clientX < rect.left || e.clientX > rect.right || 
+        e.clientY < rect.top || e.clientY > rect.bottom) {
+      timeline.classList.remove('drag-over');
+      hideDropIndicator();
+    }
+  });
+
+  timeline.addEventListener('drop', (e) => {
+    e.preventDefault();
+    timeline.classList.remove('drag-over');
+    
+    const segmentId = e.dataTransfer?.getData('text/plain');
+    
+    if (draggedArrangementItem) {
+      const oldIndex = arrangement.findIndex(a => a.id === draggedArrangementItem!.id);
+      if (oldIndex !== -1 && dragInsertIndex !== -1) {
+        const newIndex = dragInsertIndex > oldIndex ? dragInsertIndex - 1 : dragInsertIndex;
+        const [item] = arrangement.splice(oldIndex, 1);
+        arrangement.splice(newIndex, 0, item);
+        player.setSegments(segments, arrangement);
+        renderArrangement();
+        updateStatus('已调整排列顺序');
+      }
+      draggedArrangementItem = null;
+    } else if (draggedSegment && segmentId) {
+      const insertIndex = dragInsertIndex >= 0 ? dragInsertIndex : arrangement.length;
+      const newItem: ArrangementItem = {
+        id: generateId(),
+        segmentId: draggedSegment.id,
+        startTick: 0,
+      };
+      arrangement.splice(insertIndex, 0, newItem);
+      player.setSegments(segments, arrangement);
+      renderArrangement();
+      updateStatus(`已添加片段: ${draggedSegment.name}`);
+      draggedSegment = null;
+    }
+    
+    hideDropIndicator();
+  });
+}
+
+function updatePlayerWithArrangement(): void {
+  const playNotes = getArrangementNotes();
+  player.setNotes(playNotes);
+  player.setSegments(segments, arrangement);
+}
+
 function render(): void {
   if (!renderer) return;
 
@@ -1204,6 +1600,40 @@ function render(): void {
     tracks,
     currentTrackId
   );
+
+  renderSegmentHighlights();
+}
+
+function renderSegmentHighlights(): void {
+  const existingHighlights = document.querySelectorAll('.segment-highlight');
+  existingHighlights.forEach(h => h.remove());
+
+  if (segments.length === 0) return;
+
+  const gridWrapper = document.querySelector('.grid-wrapper') as HTMLElement;
+  if (!gridWrapper) return;
+
+  const { beatWidth, ticksPerBeat, headerHeight, chordBarHeight } = viewConfig;
+  const scrollLeft = scrollWrapper.scrollLeft;
+
+  for (const segment of segments) {
+    const startX = (segment.startTick / ticksPerBeat) * beatWidth - scrollLeft;
+    const endX = (segment.endTick / ticksPerBeat) * beatWidth - scrollLeft;
+    const width = endX - startX;
+
+    if (startX > gridWrapper.clientWidth || endX < 0) continue;
+
+    const highlight = document.createElement('div');
+    highlight.className = 'segment-highlight';
+    highlight.style.left = `${startX}px`;
+    highlight.style.width = `${width}px`;
+    highlight.style.top = `${headerHeight + chordBarHeight}px`;
+    highlight.style.height = `calc(100% - ${headerHeight + chordBarHeight + viewConfig.velocityEditorHeight}px)`;
+    highlight.style.borderColor = segment.color;
+    highlight.title = segment.name;
+
+    gridWrapper.appendChild(highlight);
+  }
 }
 
 function handleChordBarMouseDown(e: MouseEvent): void {

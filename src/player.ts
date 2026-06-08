@@ -1,4 +1,4 @@
-import type { Note } from './types';
+import type { Note, Segment, ArrangementItem } from './types';
 import { synth } from './synth';
 
 export interface PlayerState {
@@ -29,11 +29,19 @@ export class Player {
   private onPlayheadChange: ((ticks: number) => void) | null = null;
   private onStop: (() => void) | null = null;
 
+  private segments: Segment[] = [];
+  private arrangement: ArrangementItem[] = [];
+
   setNotes(notes: Note[]): void {
     this.notes = notes;
     if (this.state.isPlaying) {
       this.updateScheduledEvents();
     }
+  }
+
+  setSegments(segments: Segment[], arrangement: ArrangementItem[]): void {
+    this.segments = segments;
+    this.arrangement = arrangement;
   }
 
   setBpm(bpm: number): void {
