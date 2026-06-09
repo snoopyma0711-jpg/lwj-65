@@ -197,7 +197,88 @@ function init(): void {
     render();
   });
 
-  updateStatus('就绪');
+  player.setSegments(segments, arrangement);
+  setupArrangementEventListeners();
+  
+  if (segments.length === 0) {
+    if (notes.length === 0) {
+      const demoNotes: Note[] = [];
+      const segmentNotes1 = [
+        { pitch: 60, start: 0, duration: TICKS_PER_BEAT },
+        { pitch: 62, start: TICKS_PER_BEAT, duration: TICKS_PER_BEAT },
+        { pitch: 64, start: TICKS_PER_BEAT * 2, duration: TICKS_PER_BEAT },
+        { pitch: 65, start: TICKS_PER_BEAT * 3, duration: TICKS_PER_BEAT },
+        { pitch: 67, start: TICKS_PER_BEAT * 4, duration: TICKS_PER_BEAT * 2 },
+        { pitch: 64, start: TICKS_PER_BEAT * 6, duration: TICKS_PER_BEAT },
+        { pitch: 62, start: TICKS_PER_BEAT * 7, duration: TICKS_PER_BEAT },
+      ];
+      
+      const segmentNotes2 = [
+        { pitch: 72, start: TICKS_PER_BEAT * 8, duration: TICKS_PER_BEAT },
+        { pitch: 71, start: TICKS_PER_BEAT * 9, duration: TICKS_PER_BEAT },
+        { pitch: 69, start: TICKS_PER_BEAT * 10, duration: TICKS_PER_BEAT },
+        { pitch: 67, start: TICKS_PER_BEAT * 11, duration: TICKS_PER_BEAT },
+        { pitch: 72, start: TICKS_PER_BEAT * 12, duration: TICKS_PER_BEAT * 2 },
+        { pitch: 69, start: TICKS_PER_BEAT * 14, duration: TICKS_PER_BEAT },
+        { pitch: 67, start: TICKS_PER_BEAT * 15, duration: TICKS_PER_BEAT },
+      ];
+      
+      for (const n of [...segmentNotes1, ...segmentNotes2]) {
+        demoNotes.push({
+          id: generateId(),
+          pitch: n.pitch,
+          start: n.start,
+          duration: n.duration,
+          velocity: 100,
+          selected: false,
+          trackId: 0,
+        });
+      }
+      notes = demoNotes;
+      player.setNotes(notes);
+    }
+    
+    const maxEndTick = notes.length > 0 
+      ? Math.max(...notes.map(n => n.start + n.duration)) 
+      : TICKS_PER_BEAT * 16;
+    const seg1End = Math.min(TICKS_PER_BEAT * 8, Math.max(TICKS_PER_BEAT * 4, Math.floor(maxEndTick / 2)));
+    const seg2Start = seg1End;
+    const seg2End = Math.min(TICKS_PER_BEAT * 16, Math.max(TICKS_PER_BEAT * 8, maxEndTick));
+    
+    segments = [
+      {
+        id: generateId(),
+        name: '主歌A',
+        startTick: 0,
+        endTick: seg1End,
+        color: '#ffd93d',
+      },
+      {
+        id: generateId(),
+        name: '副歌',
+        startTick: seg2Start,
+        endTick: seg2End,
+        color: '#4ecdc4',
+      },
+    ];
+    
+    arrangement = [
+      { id: generateId(), segmentId: segments[0].id, startTick: 0 },
+      { id: generateId(), segmentId: segments[1].id, startTick: 0 },
+      { id: generateId(), segmentId: segments[0].id, startTick: 0 },
+      { id: generateId(), segmentId: segments[1].id, startTick: 0 },
+    ];
+    
+    player.setSegments(segments, arrangement);
+  }
+  
+  renderSegmentList();
+  renderArrangement();
+  renderTrackPanel();
+  updateUI();
+  render();
+
+  updateStatus('就绪 - 已有示例片段，可直接测试播放和拖放');
 }
 
 function resizeCanvases(): void {
@@ -261,6 +342,7 @@ function setupEventListeners(): void {
   document.getElementById('clearBtn')?.addEventListener('click', clearAll);
   document.getElementById('importMidi')?.addEventListener('change', handleImportMidi);
   document.getElementById('quantizeBtn')?.addEventListener('click', quantizeNotes);
+  document.getElementById('saveSegmentBtn')?.addEventListener('click', saveSelectedAsSegment);
 
   const gridSubdivisionSelect = document.getElementById('gridSubdivisionSelect') as HTMLSelectElement;
   gridSubdivisionSelect.addEventListener('change', (e) => {
@@ -737,6 +819,15 @@ function quantizeNotes(): void {
 }
 
 function getSelectedTimeRange(): { start: number; end: number } | null {
+  if (mouseState.selectionBox && mouseState.selectionBox.width !== 0) {
+    const box = mouseState.selectionBox;
+    const startX = Math.min(box.x, box.x + box.width);
+    const endX = Math.max(box.x, box.x + box.width);
+    const startTick = Math.floor((startX + scrollX) / viewConfig.beatWidth * TICKS_PER_BEAT);
+    const endTick = Math.ceil((endX + scrollX) / viewConfig.beatWidth * TICKS_PER_BEAT);
+    return { start: startTick, end: endTick };
+  }
+
   const selectedNotes = notes.filter(n => n.selected);
   if (selectedNotes.length === 0) {
     return null;

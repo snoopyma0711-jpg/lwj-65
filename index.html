@@ -54,6 +54,8 @@
         </label>
       </div>
       <div class="toolbar-right">
+        <button id="saveSegmentBtn" class="btn">💾 保存片段</button>
+        <div class="divider"></div>
         <label class="toolbar-select-label">
           节奏模板:
           <select id="rhythmPatternSelect" class="toolbar-select">
@@ -73,8 +75,27 @@
       </div>
     </header>
 
+    <div class="arrangement-view" id="arrangementView">
+      <div class="arrangement-header">
+        <span class="arrangement-title">📋 排列视图</span>
+        <span class="arrangement-hint">从左侧拖拽片段到此处进行编排</span>
+      </div>
+      <div class="arrangement-timeline" id="arrangementTimeline">
+        <div class="arrangement-timeline-content" id="arrangementTimelineContent">
+        </div>
+      </div>
+    </div>
+
     <div class="piano-roll-container">
       <div class="left-panel">
+        <div class="segment-panel" id="segmentPanel">
+          <div class="segment-panel-header">
+            <span class="segment-panel-title">🎬 片段库</span>
+          </div>
+          <div class="segment-list" id="segmentList">
+            <div class="segment-empty">暂无片段<br>选择时间区域后点击"保存片段"</div>
+          </div>
+        </div>
         <div class="track-panel" id="trackPanel">
           <div class="track-panel-header">
             <span class="track-panel-title">🎛️ 轨道控制</span>
